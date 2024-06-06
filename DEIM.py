@@ -30,10 +30,10 @@ def DEIM(A: np.matrix, k: int) -> list[int]:
         # then invert that submatrix and multiply it by a(p)
         subA_k = A_k[p, :j]
         invSubA_k = np.linalg.inv(subA_k)
-        c = np.dot(invSubA_k, a[p])
+        c = invSubA_k @ a[p]
 
         # r = a − A_k(:, 1 : j − 1)c
-        r = a - np.dot(A_k[:, :j], c)
+        r = a - (A_k[:, :j] @ c)
 
         # [∼, p_j ] = max(|r|)
         p_j = np.argmax(abs(r))
