@@ -3,10 +3,12 @@ This file takes in a matrix A and returns an approximation B of A where A ~ B = 
 C is made up of k columns of A, R is made up of k rows of A, and U is a 
 possibly ill-conditioned matrix that optimizes the factorization.
 CUR is returned as an array of the form [C, U, R].
+EF = True will return [C, U, R, E, F] where
+C = E^TA and R = AF
 '''
 import numpy as np
 from DEIM import DEIM
-def CUR(A: np.matrix, k: int) -> list[np.matrix]:
+def CUR(A: np.matrix, k: int, EF = False) -> list[np.matrix]:
     m = np.shape(A)[0]
     n = np.shape(A)[1]
 
@@ -39,7 +41,10 @@ def CUR(A: np.matrix, k: int) -> list[np.matrix]:
     Cps = np.linalg.pinv(C)
     Rps = np.linalg.pinv(R)
     U = Cps @ A @ Rps
-    return [C, U, R]
+    if EF:
+        return [C, U, R, E, F]
+    else:
+        return [C, U, R]
 
 
 
