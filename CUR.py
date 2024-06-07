@@ -1,5 +1,5 @@
 '''
-This file takes in a matrix A and returns an approximation B of A where A ~ B = CUR.
+This file takes in a matrix A and int k and returns an approximation B of A where A ~ B = CUR.
 C is made up of k columns of A, R is made up of k rows of A, and U is a 
 possibly ill-conditioned matrix that optimizes the factorization.
 CUR is returned as an array of the form [C, U, R].
