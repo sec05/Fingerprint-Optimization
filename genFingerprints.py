@@ -21,6 +21,7 @@ def genFingerprints(file: str, numRadialFingerprints: int, numBondFingerprints: 
             f.close()
     except:
         print("Error: could not find "+file)
+        return
     
     # turn file into a data frame for easier munipulation
     firstLine = lines.pop(0)
@@ -112,6 +113,14 @@ def genFingerprints(file: str, numRadialFingerprints: int, numBondFingerprints: 
     bondTemplate.loc[bondTemplate["variables"]=="fingerprintconstants:"+atomtypes[0]+'_'+atomtypes[0]+'_'+atomtypes[0]+":bondscreened_0:alphak:","values"] = newValues
     df  = pd.concat([df,bondTemplate],ignore_index=True)
 
+    # update with total amount of fingerprints added
+    df.loc[df["variables"]=="fingerprintsperelement:"+atomtypes[0]+":","values"] = str(radialBlocks+1)
+
+    # we set the input layer size to m*k+#n's
+    m = df.loc[df["variables"]=="fingerprintconstants:"+atomtypes[0]+'_'+atomtypes[0]+'_'+atomtypes[0]+":bondscreened_0:m:","values"]
+    m = int(m.item())
+    df.loc[df["variables"]=="layersize:"+atomtypes[0]+":0:","values"] = (m*numBondFingerprints)+alphas 
+
     # finally we write the data frame back to the input file
     df = df.to_numpy()
     with open(file, "w") as f:
@@ -122,6 +131,6 @@ def genFingerprints(file: str, numRadialFingerprints: int, numBondFingerprints: 
     print("Finished generating fingerprints!")
 
 if __name__ == "__main__":
-    genFingerprints("_Ti copy.nn",50,100,(80,100),(-5,100))
+    genFingerprints("_Ti copy.nn",5,5,(80,100),(-5,100))
 
     
