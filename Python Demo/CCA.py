@@ -4,17 +4,18 @@ C is made up of k columns of A and we just return C
 '''
 
 import numpy as np
-from DEIM import DEIM
+import scipy
+import scipy.linalg
+from DEIMParallel import DEIMParallel
 
 def CCA(A: np.matrix, k: int) -> np.matrix:
     
-    # Compute SVD (we only need V)
-    _, _, V = np.linalg.svd(A)
-    V = V.transpose()
-
+    # Compute eigenvectors of A^TA
+    A = A.transpose() @ A
+    _,v = scipy.linalg.eigh(A)
+    V=np.matrix(v)
     # Apply DEIM to V
-    qs = DEIM(V,k)
-
+    qs = DEIMParallel(V,k)
     # Form C
     C = A[:,qs]
 

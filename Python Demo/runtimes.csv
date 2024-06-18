@@ -1,0 +1,9 @@
+implementation,n,k,time
+All direct methods single core,10,10,0.0
+All direct methods single core,100,10,0.008012533187866211
+All direct methods single core,1000,10,0.6862461566925049
+All direct methods single core,10000,10,318.4978790283203
+All direct methods with scipy.linalg.eigh,10,10,0.0009996891021728516
+All direct methods with scipy.linalg.eigh,100,10,0.05877852439880371
+All direct methods with scipy.linalg.eigh,1000,10,5.7979981899261475
+All direct methods with scipy.linalg.eigh,10000,10,180.2653522491455
