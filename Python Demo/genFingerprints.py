@@ -133,17 +133,18 @@ def genFingerprints(file: str, numRadialFingerprints: int, numBondFingerprints: 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("CUR Decomposition program FILL IN LATER")
-    parser.add_argument("-in", "--input",metavar='\b', type=str, required=True, help="Path to your input file for the network.")
-    parser.add_argument("-n","--network",metavar='\b',type=str,required=True,help="Path to the network you are using.")
-    parser.add_argument("-rf", "--radialFingerprints",metavar='\b',type=int,required=True, help="The amount of radial fingerprints to generate.")
-    parser.add_argument("-bf","--bondfingerprints",metavar='\b',type=str,required=True,  help="The amount of bond fingerprints to generate.")
-    parser.add_argument("-rflb", "--radialFingerprintsLowerBound",metavar='\b',type=float,required=False, help="The lower bound of radial fingerprint generation. Defaults to 0.")
-    parser.add_argument("-rfub","--radialFingerprintUpperBound",metavar='\b',type=float,required=False,help="The upper bound of radial fingerprint generation. Defaults to 10.")
-    parser.add_argument("-bflb", "--bondFingerprintsLowerBound",metavar='\b',type=float,required=False, help="The lower bound of bond fingerprint generation. Defaults to 0.")
-    parser.add_argument("-bfub","--bondFingerprintUpperBound",metavar='\b',type=float,required=False,help="The upper bound of bond fingerprint generation. Defaults to 10.")
+    parser.add_argument("--i", "--input",metavar='\b', type=str, required=True, help="Path to your input file for the network.")
+    parser.add_argument("--rf", "--radialFingerprints",metavar='\b',type=int,required=True, help="The amount of radial fingerprints to generate.")
+    parser.add_argument("--bf","--bondfingerprints",metavar='\b',type=int,required=True,  help="The amount of bond fingerprints to generate.")
+    parser.add_argument("--rflb", "--radialFingerprintsLowerBound",metavar='\b',type=float,required=False, help="The lower bound of radial fingerprint generation. Defaults to 0.")
+    parser.add_argument("--rfub","--radialFingerprintUpperBound",metavar='\b',type=float,required=False,help="The upper bound of radial fingerprint generation. Defaults to 10.")
+    parser.add_argument("--bflb", "--bondFingerprintsLowerBound",metavar='\b',type=float,required=False, help="The lower bound of bond fingerprint generation. Defaults to 0.")
+    parser.add_argument("--bfub","--bondFingerprintUpperBound",metavar='\b',type=float,required=False,help="The upper bound of bond fingerprint generation. Defaults to 10.")
     args = parser.parse_args()
-    if args.radialFingerprintsLowerBound == None: args.radialFingerprintsLowerBound = 0
-    if args.radialFingerprintsLowerBound == None: args.radialFingerprintsLowerBound = 0
-    genFingerprints("_Ti copy.nn",5,5,(80,100),(-5,100))
+    if args.rflb == None: args.rflb = 0
+    if args.bflb == None: args.bflb = 0
+    if args.rfub == None: args.rfub = 10
+    if args.bfub == None: args.bfub = 10
+    genFingerprints(args.i, args.rf, args.bf, (args.rflb, args.rfub), (args.bflb, args.bfub))
 
     
