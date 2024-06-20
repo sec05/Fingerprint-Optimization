@@ -5,15 +5,14 @@
  *  Calibration class handles everything else.
  */
 
-
+#include <stdio.h>
 #include "optimizer.h"
 
 //read command line input.
 int main(int argc, char **argv)
 {
 	printf("Started running!\n");
-	Optimizer* optimizer = new Optimizer("_Ti.nn");
-	optimizer->generate_input_file(1,2,3,4,5,6);
+	OPT::Optimizer* optimizer = new OPT::Optimizer("_Ti.nn");
 	return 0;
 }
 

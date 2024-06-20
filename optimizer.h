@@ -1,11 +1,16 @@
-#include <pair_spin_rann.h>
+/*
+This class is the driver class for the optimization program 
+*/
+#include "NLA/matrix.h"
 
-namespace LAMMPS_NS{
-
+namespace OPT{
 class Optimizer{
     public:
-    PairRANN* calibrator;
-    
+    Optimizer(char*);
+    ~Optimizer();
+
+    NLA::Matrix* fingerprints;
+    char* inputFile;
 
 };
 }

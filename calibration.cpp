@@ -4989,13 +4989,13 @@ int PairRANN::count_words(char *line,char *delimiter){
 
 void PairRANN::errorf(const std::string &file, int line,const char *message){
 	//see about adding message to log file
-	printf("Error: file: INSERT, line: %d\n%s\n",line,message);
+	printf("Error: file: %s, line: %d\n%s\n",file.c_str(),line,message);
 	exit(1);
 }
 
 void PairRANN::errorf(char *file, int line,const char *message){
 	//see about adding message to log file
-	printf("Error: file: INSERT, line: %d\n%s\n",line,message);
+	printf("Error: file: %s, line: %d\n%s\n",file,line,message);
 	exit(1);
 }
 

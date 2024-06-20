@@ -166,5 +166,5 @@ calibration
 fingerprint_optimizer
 obj
 .vscode
-*.nn.*
+*.nn
 *.d
