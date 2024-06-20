@@ -6,24 +6,14 @@
  */
 
 
-#include "pair_spin_rann.h"
-
-using namespace LAMMPS_NS;
+#include "optimizer.h"
 
 //read command line input.
 int main(int argc, char **argv)
 {
-	char str[MAXLINE];
-	if (argc!=3 || strcmp(argv[1],"-in")!=0){
-		sprintf(str,"syntax: nn_calibration -in \"input_file.rann\"\n");
-		std::cout<<str;
-	}
-	else{
-		PairRANN *cal = new PairRANN(argv[2]);
-		cal->setup();
-		cal->run();
-		cal->finish();
-		delete cal;
-	}
+	printf("Started running!\n");
+	Optimizer* optimizer = new Optimizer("_Ti.nn");
+	optimizer->generate_input_file(1,2,3,4,5,6);
+	return 0;
 }
 

@@ -1,6 +1,6 @@
 #iter: 39, evals: 77, e_err: 4.3823620148e-06, e1: 4.3823620148e-06, ev_err 5.6489705428e-06, r_err: 4.3820349306e-07, lambda: 4.0525551530e+20
 atomtypes:
-Ti 
+Ti
 mass:Ti:
 47.867000
 fingerprintsperelement:Ti:

@@ -212,6 +212,38 @@ void PairRANN::setup(){
 	printf("finished setup(): %f seconds\n",time);
 }
 
+void PairRANN::run(){
+	if (strcmp(algorithm,"LMqr")==0){
+		//DEPRECATED. Do not use.
+		//slow but robust.
+		//levenburg_marquardt_qr();
+		errorf(FLERR,"QR algorithm is discontinued.");
+	}
+	else if (strcmp(algorithm,"LMch")==0){
+		//faster. crashes if Jacobian has any columns of zeros.
+		//usually will find exactly the same step for each iteration as qr.
+		levenburg_marquardt_ch();
+	}
+	else if (strcmp(algorithm,"CG")==0){
+		conjugate_gradient();
+	}
+	else if (strcmp(algorithm,"LMsearch")==0){
+		levenburg_marquardt_linesearch();
+	}
+	else if (strcmp(algorithm,"bfgs")==0){
+		bfgs();
+	}
+	else {
+		errorf("unrecognized algorithm");
+	}
+}
+
+
+void PairRANN::finish(){
+
+//	write_potential_file(true);
+}
+
 void PairRANN::read_parameters(std::vector<std::string> line,std::vector<std::string> line1,FILE* fp,char *filename,int *linenum,char *linetemp){
 	if (line[1]=="algorithm"){
 		if (line[1].size()>SHORTLINE){
@@ -396,9 +428,35 @@ void PairRANN::read_parameters(std::vector<std::string> line,std::vector<std::st
 	}
 	else {
 		char str[MAXLINE];
-		sprintf(str,"unrecognized keyword in parameter file: %s\n",line[1]);
+		//sprintf(str,"unrecognized keyword in parameter file: %s\n",line[1]);
 		errorf(filename,*linenum,str);
 	}
+}
+
+void PairRANN::create_random_weights(int rows,int columns,int itype,int layer,int bundle){
+	net[itype].bundleW[layer][bundle] = new double [rows*columns];
+	net[itype].freezeW[layer][bundle] = new bool [rows*columns];
+	double r;
+	for (int i=0;i<rows;i++){
+		for (int j=0;j<columns;j++){
+			r = (double)rand()/RAND_MAX*2-1;//flat distribution from -1 to 1
+			net[itype].bundleW[layer][bundle][i*columns+j] = r;
+			net[itype].freezeW[layer][bundle][i*columns+j] = 0;
+		}
+	}
+	weightdefined[itype][layer][bundle]=true;
+}
+
+void PairRANN::create_random_biases(int rows,int itype, int layer,int bundle){
+	net[itype].bundleB[layer][bundle] = new double [rows];
+	net[itype].freezeB[layer][bundle] = new bool [rows];
+	double r;
+	for (int i=0;i<rows;i++){
+		r = (double) rand()/RAND_MAX*2-1;
+		net[itype].bundleB[layer][bundle][i] = r;
+		net[itype].freezeB[layer][bundle][i] = 0;
+	}
+	biasdefined[itype][layer][bundle]=true;
 }
 
 void PairRANN::allocate(const std::vector<std::string> &elementwords)
@@ -455,6 +513,108 @@ void PairRANN::allocate(const std::vector<std::string> &elementwords)
 
 }
 
+
+void PairRANN::update_stack_size(){
+	//TO DO: fix. Still getting stack overflow from underestimating memory needs.
+	//get very rough guess of memory usage
+	int jlen = nsims;
+	if (doregularizer){
+		jlen+=betalen-1;
+	}
+	if (doforces){
+		jlen+=natoms*3;
+	}
+	//neighborlist memory use:
+	memguess = 0;
+	for (int i=0;i<nelementsp;i++){
+		memguess+=8*net[i].dimensions[0]*20*3;
+	}
+	memguess+=8*20*12;
+	memguess+=8*20*20*3;
+	//separate validation memory use:
+	memguess+=nsims*8*2;
+	//levenburg marquardt ch memory use:
+	memguess+=8*jlen*betalen*2;
+	memguess+=8*betalen*betalen;
+	memguess+=8*jlen*4;
+	memguess+=8*betalen*4;
+	//chsolve memory use:
+	memguess+=8*betalen*betalen;
+	//generous buffer:
+	memguess *= 16;
+	const rlim_t kStackSize = memguess;
+	struct rlimit rl;
+	int result;
+	result = getrlimit(RLIMIT_STACK, &rl);
+	if (result == 0)
+	{
+		if (rl.rlim_cur < kStackSize)
+		{
+			rl.rlim_cur += kStackSize;
+			result = setrlimit(RLIMIT_STACK, &rl);
+			if (result != 0)
+			{
+				fprintf(stderr, "setrlimit returned result = %d\n", result);
+			}
+		}
+	}
+}
+
+bool PairRANN::check_parameters(){
+	int itype,layer,bundle,rows,columns,r,c,count;
+	if (strcmp(algorithm,"LMqr")!=0 && strcmp(algorithm,"LMch")!=0 && strcmp(algorithm,"CG")!=0 && strcmp(algorithm,"LMsearch")!=0 && strcmp(algorithm,"bfgs")!=0)errorf(FLERR,"Unrecognized algorithm. Must be CG, LMch or LMqr\n");//add others later maybe
+	if (tolerance==0.0)errorf(FLERR,"tolerance not correctly initialized\n");
+	if (tolerance<0.0 || max_epochs < 0 || regularizer < 0.0 || potential_output_freq < 0)errorf(FLERR,"detected parameter with negative value which must be positive.\n");
+	if (targettype>3 || targettype<1)errorf(FLERR,"targettype must be 1, 2, or 3.");
+	srand(seed);
+	count=0;
+	//populate vector of frozen parameters
+	betalen = 0;
+	for (itype=0;itype<nelementsp;itype++){
+		for (layer=0;layer<net[itype].layers-1;layer++){
+			for (bundle=0;bundle<net[itype].bundles[layer];bundle++){
+				if (net[itype].identitybundle[layer][bundle]){continue;}
+				rows = net[itype].bundleoutputsize[layer][bundle];
+				columns = net[itype].bundleinputsize[layer][bundle];
+				betalen += rows*columns+rows;
+			}
+		}
+	}
+	freezebeta = new bool[betalen];
+	for (itype=0;itype<nelementsp;itype++){
+		for (layer=0;layer<net[itype].layers-1;layer++){
+			for (bundle=0;bundle<net[itype].bundles[layer];bundle++){
+				if (net[itype].identitybundle[layer][bundle]){continue;}
+				rows = net[itype].bundleoutputsize[layer][bundle];
+				columns = net[itype].bundleinputsize[layer][bundle];
+				for (r=0;r<rows;r++){
+					for (c=0;c<columns;c++){
+						if (net[itype].freezeW[layer][bundle][r*columns+c]){
+							freezebeta[count] = 1;
+							count++;
+						}
+						else {
+							freezebeta[count] = 0;
+							count++;
+						}
+					}
+					if (net[itype].freezeB[layer][bundle][r]){
+						freezebeta[count] = 1;
+						count++;
+					}
+					else {
+						freezebeta[count] = 0;
+						count++;
+					}
+				}
+			}
+		}
+		betalen_v[itype]=count;
+	}
+	betalen = count;//update betalen to skip frozen parameters
+
+	return false;//everything looks good
+}
 
 //part of setup. Do not optimize:
 void PairRANN::read_dump_files(){
@@ -1168,7 +1328,142 @@ void PairRANN::compute_fingerprints(){
 	}
 }
 
+void PairRANN::normalize_data(){
+	int i,n,ii,j,itype;
+	int natoms[nelementsp];
+	normalgain = new double *[nelementsp];
+	normalshift = new double *[nelementsp];
+	//initialize
+	for (i=0;i<nelementsp;i++){
+		if (net[i].layers==0)continue;
+		normalgain[i] = new double [net[i].dimensions[0]];
+		normalshift[i] = new double [net[i].dimensions[0]];
+		for (j=0;j<net[i].dimensions[0];j++){
+			normalgain[i][j]=0;
+			normalshift[i][j]=0;
+		}
+		natoms[i] = 0;
+	}
+	//get mean value of each 1st layer neuron input
+	for (n=0;n<nsims;n++){
+		for (ii=0;ii<sims[n].inum;ii++){
+			itype = sims[n].type[ii];
+			natoms[itype]++;
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					normalshift[itype][j]+=sims[n].features[ii][j];
+				}
+			}
+			itype = nelements;
+			natoms[itype]++;
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					normalshift[itype][j]+=sims[n].features[ii][j];
+				}
+			}
+		}
+	}
+	for (i=0;i<nelementsp;i++){
+		if (net[i].layers==0)continue;
+		for (j=0;j<net[i].dimensions[0];j++){
+			normalshift[i][j]/=natoms[i];
+		}
+	}
+	//get standard deviation
+	for (n=0;n<nsims;n++){
+		for (ii=0;ii<sims[n].inum;ii++){
+			itype = sims[n].type[ii];
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					normalgain[itype][j]+=(sims[n].features[ii][j]-normalshift[itype][j])*(sims[n].features[ii][j]-normalshift[itype][j]);
+				}
+			}
+			itype = nelements;
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					normalshift[itype][j]+=(sims[n].features[ii][j]-normalshift[itype][j])*(sims[n].features[ii][j]-normalshift[itype][j]);
+				}
+			}
+		}
+	}
+	for (i=0;i<nelementsp;i++){
+		if (net[i].layers==0)continue;
+		for (j=0;j<net[i].dimensions[0];j++){
+			normalgain[i][j]=sqrt(normalgain[i][j]/natoms[i]);
+		}
+	}
+	//shift input to mean=0, std = 1
+	for (n=0;n<nsims;n++){
+		for (ii=0;ii<sims[n].inum;ii++){
+			itype = sims[n].type[ii];
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					if (normalgain[itype][j]>0){
+						sims[n].features[ii][j] -= normalshift[itype][j];
+						sims[n].features[ii][j] /= normalgain[itype][j];
+					}
+				}
+			}
+			itype = nelements;
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					if (normalgain[itype][j]>0){
+						sims[n].features[ii][j] -= normalshift[itype][j];
+						sims[n].features[ii][j] /= normalgain[itype][j];
+					}
+				}
+			}
+		}
+	}
+	NNarchitecture *net_new = new NNarchitecture[nelementsp];
+	normalize_net(net_new);
+	copy_network(net_new,net);
+	delete [] net_new;
+}
 
+void PairRANN::unnormalize_net(NNarchitecture *net_out){
+	int i,j,k;
+	double temp;
+	copy_network(net,net_out);
+	for (i=0;i<nelementsp;i++){
+		if (net[i].layers>0){
+			for (int i1=0;i1<net[i].bundles[0];i1++){
+				for (j=0;j<net[i].bundleoutputsize[0][i1];j++){
+					temp = 0.0;
+					for (k=0;k<net[i].bundleinputsize[0][i1];k++){
+						if (normalgain[i][k]>0){
+							net_out[i].bundleW[0][i1][j*net[i].bundleinputsize[0][i1]+k]/=normalgain[i][net[i].bundleinput[0][i1][k]];
+							temp+=net_out[i].bundleW[0][i1][j*net[i].bundleinputsize[0][i1]+k]*normalshift[i][net[i].bundleinput[0][i1][k]];
+						}
+					}
+					net_out[i].bundleB[0][i1][j]-=temp;
+				}
+			}
+		}
+	}
+}
+
+void PairRANN::normalize_net(NNarchitecture *net_out){
+	int i,j,k;
+	double temp;
+	copy_network(net,net_out);
+	for (i=0;i<nelementsp;i++){
+		if (net[i].layers>0){
+			for (int i1=0;i1<net[i].bundles[0];i1++){
+				for (j=0;j<net[i].bundleoutputsize[0][i1];j++){
+					temp = 0.0;
+					for (k=0;k<net[i].bundleinputsize[0][i1];k++){
+						if (normalgain[i][k]>0){
+							temp+=net_out[i].bundleW[0][i1][j*net[i].bundleinputsize[0][i1]+k]*normalshift[i][net[i].bundleinput[0][i1][k]];
+							if (weightdefined[i][i1][0])net_out[i].bundleW[0][i1][j*net[i].bundleinputsize[0][i1]+k]*=normalgain[i][net[i].bundleinput[0][i1][k]];
+						}
+					}
+					if (biasdefined[i][i1][0])net_out[i].bundleB[0][i1][j]+=temp;
+				}
+			}
+		}
+	}
+}
 
 void PairRANN::separate_validation(){
 	int n1,n2,i,vnum,len,startI,endI,j,t,k;
@@ -1241,6 +1536,2756 @@ void PairRANN::separate_validation(){
 	std::cout<<str;
 }
 
+void PairRANN::copy_network(NNarchitecture *net_old,NNarchitecture *net_new){
+	int i,j,k;
+	for (i=0;i<nelementsp;i++){
+		net_new[i].layers = net_old[i].layers;
+		if (net_new[i].layers>0){
+			net_new[i].maxlayer = net_old[i].maxlayer;
+			net_new[i].sumlayers=net_old[i].sumlayers;
+			net_new[i].dimensions = new int [net_new[i].layers];
+			net_new[i].startI = new int [net_new[i].layers];
+			net_new[i].bundleW = new double**[net_new[i].layers-1];
+			net_new[i].bundleB = new double**[net_new[i].layers-1];
+			net_new[i].freezeW = new bool**[net_new[i].layers-1];
+			net_new[i].freezeB = new bool**[net_new[i].layers-1];
+			net_new[i].bundleinputsize = new int*[net_new[i].layers-1];
+			net_new[i].bundleoutputsize = new int*[net_new[i].layers-1];
+			net_new[i].bundleinput = new int**[net_new[i].layers-1];
+			net_new[i].bundleoutput = new int**[net_new[i].layers-1];
+			net_new[i].bundles = new int [net_new[i].layers-1];
+			net_new[i].identitybundle = new bool *[net_new[i].layers-1];
+			for (j=0;j<net_old[i].layers;j++){
+				net_new[i].dimensions[j]=net_old[i].dimensions[j];
+				net_new[i].startI[j]=net_old[i].startI[j];
+				if (j==net_old[i].layers-1)continue;
+				net_new[i].bundles[j]=net_old[i].bundles[j];
+				net_new[i].bundleW[j] = new double*[net_new[i].bundles[j]];
+				net_new[i].bundleB[j] = new double*[net_new[i].bundles[j]];
+				net_new[i].freezeW[j] = new bool*[net_new[i].bundles[j]];
+				net_new[i].freezeB[j] = new bool*[net_new[i].bundles[j]];
+				net_new[i].identitybundle[j] = new bool[net_new[i].bundles[j]];
+				net_new[i].bundleinputsize[j] = new int[net_new[i].bundles[j]];
+				net_new[i].bundleoutputsize[j] = new int [net_new[i].bundles[j]];
+				net_new[i].bundleinput[j] = new int*[net_new[i].bundles[j]];
+				net_new[i].bundleoutput[j] = new int*[net_new[i].bundles[j]];
+				for (int i1=0;i1<net_old[i].bundles[j];i1++){
+					net_new[i].identitybundle[j][i1]=net_old[i].identitybundle[j][i1];
+					net_new[i].bundleinputsize[j][i1]=net_old[i].bundleinputsize[j][i1];
+					net_new[i].bundleoutputsize[j][i1]=net_old[i].bundleoutputsize[j][i1];
+					net_new[i].bundleinput[j][i1] = new int[net_new[i].bundleinputsize[j][i1]];
+					net_new[i].bundleoutput[j][i1] = new int[net_new[i].bundleoutputsize[j][i1]];
+					net_new[i].bundleW[j][i1] = new double[net_new[i].bundleinputsize[j][i1]*net_new[i].bundleoutputsize[j][i1]];
+					net_new[i].bundleB[j][i1] = new double[net_new[i].bundleoutputsize[j][i1]];
+					net_new[i].freezeW[j][i1] = new bool[net_new[i].bundleinputsize[j][i1]*net_new[i].bundleoutputsize[j][i1]];
+					net_new[i].freezeB[j][i1] = new bool[net_new[i].bundleoutputsize[j][i1]];
+					for (int k=0;k<net_new[i].bundleinputsize[j][i1]*net_new[i].bundleoutputsize[j][i1];k++){
+						net_new[i].bundleW[j][i1][k] = net_old[i].bundleW[j][i1][k];
+						net_new[i].freezeW[j][i1][k] = net_old[i].freezeW[j][i1][k];
+					}
+					for (int k=0;k<net_new[i].bundleinputsize[j][i1];k++){
+						net_new[i].bundleinput[j][i1][k]=net_old[i].bundleinput[j][i1][k];
+					}
+					for (int k=0;k<net_new[i].bundleoutputsize[j][i1];k++){
+						net_new[i].bundleoutput[j][i1][k]=net_old[i].bundleoutput[j][i1][k];
+						net_new[i].bundleB[j][i1][k]=net_old[i].bundleB[j][i1][k];
+						net_new[i].freezeB[j][i1][k]=net_old[i].freezeB[j][i1][k];
+					}
+				}
+			}
+		}
+	}
+}
+
+
+
+//top level run function, calls compute_jacobian and qrsolve. Cannot be parallelized.
+void PairRANN::levenburg_marquardt_ch(){
+	//jlen is number of rows; betalen is number of columns of jacobian
+	char str[MAXLINE];
+	int iter,jlen,i,jlenv,j,jlen2,nn;
+	bool goodstep=true;
+	double energy_fit,energy_fit1,energy_fitv,force_fit,force_fitv,force_fit1,reg_fit,reg_fit1;
+	double lambda = lambda_initial;
+	double vraise = lambda_increase;
+	double vreduce = lambda_reduce;
+	char line[MAXLINE];
+    this->energy_fitv_best = 10^300;
+	int i_off, j_off, j_offPi;
+	double time1, time2;
+	jlen = count_unique_species(r,nsimr);
+	jlenv = count_unique_species(v,nsimv);
+	speciesnumberr = jlen;
+	speciesnumberv = jlenv;
+	if (targettype==1){
+		jlen = nsimr;
+		jlenv = nsimv;
+	}
+	else if (targettype==3){
+		jlen = natomsr;
+		jlenv = natomsv;
+	}
+	if (doforces){
+		jlen += natoms*3;
+		jlenv += natoms*3;
+	}
+	jlen2 = jlen;
+	if (doregularizer)jlen += betalen;//do not regulate last bias
+	jlen1 = jlen;
+		sprintf(str,"types=%d; betalen=%d; jlen1=%d; jlen2=%d, regularization:%d\n",nelementsp,betalen,jlen1,jlen2, doregularizer);
+	std::cout<<str;
+	double J[jlen1*betalen];
+	double J1[jlen1*betalen];
+	double J2[betalen*betalen];
+	double t2[betalen];
+	double target[jlen1];
+	double target1[jlen1];
+	double targetv[jlenv];
+	double beta[betalen];
+	double beta1[betalen];
+	double D[betalen];
+	double *dp;
+	double delta[jlen1];//extra length used internally in qrsolve
+	dp = delta;
+//	double *Jp = J;
+//	double *Jp1 = J1;
+    double *tp,*tp1,*bp,*bp1,*Jp,*Jp1;
+	tp = target;
+	tp1 = target1;
+	bp = beta;
+	bp1 = beta1;
+	Jp = J;
+	Jp1 = J1;
+	force_fit = energy_fit = reg_fit = energy_fit1 = force_fit1 = reg_fit1 = 0.0;
+	//clock_t start1 = clock();
+	double start_time_tot = omp_get_wtime();
+	jacobian_convolution(Jp,tp,r,nsimr,natomsr,net);
+
+	NNarchitecture net1[nelementsp];
+	copy_network(net,net1);
+	for (i=0;i<nsimr;i++){
+		energy_fit += tp[i]*tp[i];
+	}
+	energy_fit/=jlen2;
+	if (doforces){
+		for (i=nsimr;i<nsimr+natoms*3;i++)force_fit +=tp[i]*tp[i];
+		force_fit/=natomsr*3;
+	}
+	if (doregularizer){
+		for (i=1;i<betalen;i++){
+			i_off = i+jlen-betalen;
+			reg_fit +=tp[i_off]*tp[i_off];
+		}
+		reg_fit /= betalen;
+	}
+	double initial_reg = regularizer;
+	double initial_eng = energy_fit;
+	flatten_beta(net,bp);
+	force_fitv = energy_fitv = 0.0;
+	int counter = 0;
+	int count = 0;
+	int count1 = 0;
+	int count2 = 0;
+	int count3 = 0;
+	int count4 = 0;
+	int count5 = 0;
+	int count5spin = 0;
+	int count6 = 0;
+	iter = 0;
+	//write_debug_level5(tp,targetv);
+	FILE *fid = fopen(log_file,"w");
+	if (fid==NULL)errorf("couldn't open log file!");
+	if (doforces){
+		sprintf(line,"iter: %d, evals: %d, e_err: %.10e, e1: %.10e, ev_err %.10e, f_err: %.10e, fv_err %.10e, r_err: %.10e, lambda: %.10e\n",iter,counter,energy_fit,energy_fit1,energy_fitv,force_fit,force_fitv,reg_fit,lambda);
+	}
+	else{
+		sprintf(line,"iter: %d, evals: %d, e_err: %.10e, e1: %.10e, ev_err %.10e, r_err: %.10e, lambda: %.10e\n",iter,counter,energy_fit,energy_fit1,energy_fitv,reg_fit,lambda);
+	}
+	write_potential_file(true,line,0,initial_reg);
+	double start2;
+	while (iter<max_epochs){
+		if (goodstep){
+			if (nsimv>0){
+				//do validation forward pass
+				forward_pass(targetv,v,nsimv,net);
+				if (debug_level1_freq>0)write_debug_level1(tp,targetv);
+				//compute_jacobian(J1,targetv,v,nsimv,natomsv,net1);
+				energy_fitv=0.0;
+				for (i=0;i<nsimv;i++){
+					energy_fitv += targetv[i]*targetv[i];
+				}
+				energy_fitv /= jlenv;
+				if (doforces){
+					force_fitv = 0.0;
+					for (i=nsimv;i<natomsv*3+nsimv;i++){
+						force_fitv += targetv[i]*targetv[i];
+					}
+					force_fitv/=(natomsv*3);
+				}
+			}
+			else{
+				energy_fitv = 0.0;
+				force_fitv = 0.0;
+			}
+
+			// clock_t start2 = clock();
+			start2 = omp_get_wtime();
+
+			for (i=0;i<betalen;i++){
+				i_off = i*betalen;
+				for (int k=0;k<=i;k++){
+					J2[i_off+k] = 0.0;
+				}
+			}
+
+
+			// #pragma omp parallel default(none) shared(J2,Jp,jlen2,betalen, doregularizer)
+			#pragma omp parallel
+			{
+			// loop reordered to remove the dependancy. Single thread calculation would be slow. Observed gain when thread more than around 8
+			#pragma omp for
+			for (int i=0;i<betalen;i++){
+				int i_off = i*betalen;
+				for (int k=0;k<=i;k++){
+					for (int j=0;j<jlen2;j++){
+						int j_off = j*betalen;
+						int j_offPi = j_off+i;
+						J2[i_off+k] += Jp[j_offPi]*Jp[j_off+k];
+					}
+				}
+			}
+
+			if (doregularizer){
+				#pragma omp for
+				for (int i=0;i<betalen;i++){
+					int	i_off = i*betalen;
+					int ij_off = jlen2*betalen + i_off;
+					J2[i_off+i]+=Jp[ij_off+i]*Jp[ij_off+i];
+				}
+			}
+
+			#pragma omp barrier
+			#pragma omp single
+			{
+			for (int i=0;i<betalen;i++){
+				D[i] = J2[i*betalen+i];
+				if (D[i]==0){errorf(FLERR,"Jacobian is rank deficient!\n");}//one or more weight/bias has no effect on the computed energy of any of the atoms.
+				if (doregularizer) // t2 can be initialized with 0 or derivative w.r.t. weight
+					t2[i]=Jp[jlen2*betalen+i*betalen+i]*tp[jlen2+i];
+				else
+				    t2[i]=0;
+			}
+			}
+			// loop splitting for threading. Initialization for t2 is done above.
+			#pragma omp for
+			for (int i=0;i<betalen;i++){
+				// t2[i]=0;
+				for (j=0;j<jlen2;j++){
+					//printf("%d %f\n",j,tp[j]);
+					t2[i]+=Jp[j*betalen+i]*tp[j];
+				}
+			}
+
+			}
+			double adexp = 0.1;
+			if (adaptive_regularizer) {regularizer *= sqrt(initial_reg/reg_fit*energy_fit);}
+			if (regularizer<1e-8){
+				doregularizer=false;
+				jlen -=betalen;
+				jlen1 = jlen;
+			}
+			// if (doregularizer){
+			// 	for (int i=0;i<betalen;i++){
+			// 		t2[i]+=Jp[jlen2*betalen+i*betalen+i]*tp[jlen2+i];
+			// 	}
+			// }
+
+			// clock_t end = clock();
+			// time2 = (double) (end-start2) / CLOCKS_PER_SEC * 1000.0;
+			// sprintf(str,"loop: %f ms\n",time2);
+			// std::cout<<str;
+			double time = (double) (omp_get_wtime() - start2)*1000.0;
+			// printf("loop: %f ms\n",time);
+            //printf(" - best fit : %f \n\n\n",energy_fitv);
+
+		}
+        bool is_write_potential = false;
+        if (count == potential_output_freq){
+			count = 0;
+			if ((energy_fitv*natomsv+energy_fit*natomsr)/natoms < this->energy_fitv_best) {
+				this->energy_fitv_best = (energy_fitv*natomsv+energy_fit*natomsr)/natoms;
+				is_write_potential = true;
+			}
+			else {
+				count--;
+			}
+        }
+		if (doforces){
+			sprintf(line,"iter: %d, evals: %d, e_err: %.10e, e1: %.10e, ev_err %.10e, f_err: %.10e, fv_err %.10e, r_err: %.10e, lambda: %.10e\n",iter,counter,energy_fit,energy_fit1,energy_fitv,force_fit,force_fitv,reg_fit,lambda);
+		}
+		else{
+			sprintf(line,"iter: %d, evals: %d, e_err: %.10e, e1: %.10e, ev_err %.10e, r_err: %.10e, lambda: %.10e\n",iter,counter,energy_fit,energy_fit1,energy_fitv,reg_fit,lambda);
+		}
+		std::cout<<line;
+		fprintf(fid,"%s",line);
+		count++;
+		count1++;
+		count2++;
+		count3++;
+		count4++;
+		count5++;
+		count5spin++;
+		count6++;
+        if (is_write_potential){
+            write_potential_file(true,line,iter,initial_reg);
+        }
+        if (count1==debug_level1_freq){
+			write_debug_level1(tp,targetv);
+			count1=0;
+		}
+		if (count2==debug_level2_freq){
+			write_debug_level2(tp,targetv);
+			count2=0;
+		}
+		if (count3==debug_level3_freq){
+			//always print the ones computed last, regardless of whether the step was good.
+			if (goodstep){
+				write_debug_level3(Jp,tp,bp,dp);
+			}
+			else {
+				write_debug_level3(Jp1,tp1,bp1,dp);
+			}
+			count3=0;
+		}
+		if (count4==debug_level4_freq){
+			write_debug_level4(tp,targetv);
+			count4=0;
+		}
+		if (count5==debug_level5_freq){
+			write_debug_level5(tp,targetv);
+			count5=0;
+		}
+		if (count5spin=debug_level5_spin_freq){
+			write_debug_level5_spin(tp,targetv);
+			count5spin=0;
+		}
+		if (count6==debug_level6_freq){
+			write_debug_level6(tp,targetv);
+			count6=0;
+		}
+		counter++;
+		// if (count1 == potential_output_freq){
+         //   if (energy_fitv < this->energy_fitv_best){
+         //       this->energy_fitv_best = energy_fitv;
+         //       printf(" so far best fit : %f \n\n\n",energy_fitv_best);
+         //       write_potential_file(true,line);
+         //   }
+		//	count1 = 0;
+		//}
+		for (i=0;i<betalen;i++){
+			J2[i*betalen+i]=D[i]+sqrt(D[i]*lambda);
+		}
+
+//		clock_t start1 = clock();
+		chsolve(J2,betalen,t2,dp);
+		// FILE *fidt = fopen("t2dpnew.log","w");
+		// for (i=0;i<betalen;i++){
+		// 	fprintf(fidt,"%f,%f\n",t2[i],dp[i]);
+		// }
+		// fclose(fidt);
+		// fidt = fopen("J2new.log","w");
+		// for (i=0;i<betalen;i++){
+		// 	for (j=0;j<betalen;j++){
+		// 			fprintf(fidt,"%f,",J2[i*betalen+j]);
+		// 		}
+		// 		fprintf(fidt,"\n");
+		// }
+		// fclose(fidt);
+		// if (counter==1){errorf("stop");}
+//		clock_t end1 = clock();
+//		time = (double) (end1-start1) / CLOCKS_PER_SEC * 1000.0;
+//		sprintf(str,"chsolve(): %f ms\n",time);
+//		std::cout<<str;
+
+		// for (i=0;i<betalen;i++){
+		// 	sprintf(str,"i %d  %f %f\n",i,bp[i],dp[i]);
+		// 	std::cout<<str;
+		// }
+		//double dpn = 0.0;
+		for (i=0;i<betalen;i++){
+			bp1[i]=bp[i]+dp[i];
+			//dpn += dp[i]*dp[i];
+		}
+		//printf("stepsize: %f\n",dpn);
+		unflatten_beta(net1,bp1);
+		jacobian_convolution(Jp1,tp1,r,nsimr,natomsr,net1);
+		energy_fit1 = 0.0;
+		for (i=0;i<nsimr;i++)energy_fit1 += tp1[i]*tp1[i];
+		//for (i=0;i<nsimr;i++)printf("%d %f\n",i,tp1[i]);
+		energy_fit1/=jlen2;
+		if (doforces){
+ 			force_fit1 = 0.0;
+			for (i=nsimr;i<natomsr*3+nsimr;i++){
+				force_fit1 += tp1[i]*tp1[i];
+			}
+			force_fit1/=natomsr*3;
+		}
+		if (doregularizer){
+			reg_fit1 = 0.0;
+			for (i=1;i<betalen;i++){
+				i_off = i+jlen-betalen;
+				reg_fit1 += tp1[i_off]*tp1[i_off];
+			}
+			reg_fit1 /= betalen;
+		}
+		if (energy_fit1+force_fit1+reg_fit1<energy_fit+force_fit+reg_fit){
+			goodstep = true;
+			lambda = lambda*vreduce;
+			energy_fit = energy_fit1;
+			force_fit = force_fit1;
+			reg_fit = reg_fit1;
+			double *tempb;
+			tempb = bp;
+			bp = bp1;
+			bp1= tempb;
+			double *tempJ;
+			tempJ = Jp;
+			Jp = Jp1;
+			Jp1 = tempJ;
+			double *tempT = tp;
+			tp = tp1;
+			tp1 = tempT;
+			unflatten_beta(net,bp);
+			iter++;
+		}
+		else {
+			goodstep=false;
+			lambda = lambda*vraise;
+			if (lambda > 10e50){
+				//write_potential_file(true,line,iter,initial_reg);
+				errorf("Terminating because convergence is not making progress.\n");
+			}
+		}
+		if (energy_fit+force_fit<tolerance){
+			std::cout<<"Terminating because reached convergence tolerance\n";
+			write_potential_file(true,line,iter,initial_reg);
+			break;
+		}
+	}
+	//delete dynamic memory use
+	for (int i=0;i<=nelements;i++){
+		if (net1[i].layers>0){
+			for (int j=0;j<net1[i].layers-1;j++){
+				delete [] net1[i].bundleinputsize[j];
+				delete [] net1[i].bundleoutputsize[j];
+				for (int k=0;k<net1[i].bundles[j];k++){
+					delete [] net1[i].bundleinput[j][k];
+					delete [] net1[i].bundleoutput[j][k];
+					delete [] net1[i].bundleW[j][k];
+					delete [] net1[i].bundleB[j][k];
+					delete [] net1[i].freezeW[j][k];
+					delete [] net1[i].freezeB[j][k];
+				}
+				delete [] net1[i].bundleinput[j];
+				delete [] net1[i].bundleoutput[j];
+				delete [] net1[i].bundleW[j];
+				delete [] net1[i].bundleB[j];
+				delete [] net1[i].freezeW[j];
+				delete [] net1[i].freezeB[j];
+			}
+			delete [] net1[i].bundleinput;
+			delete [] net1[i].bundleoutput;
+			delete [] net1[i].bundleW;
+			delete [] net1[i].bundleB;
+			delete [] net1[i].freezeW;
+			delete [] net1[i].freezeB;
+			delete [] net1[i].dimensions;
+			delete [] net1[i].startI;
+		}
+	}
+
+	// clock_t end = clock();
+    // time1 = (double) (end-start1) / CLOCKS_PER_SEC * 1000.0;
+	// sprintf(str,"LM_ch(): %f ms\n",time1);
+	// std::cout<<str;
+    double time = (double) (omp_get_wtime() - start_time_tot)*1000.0;
+    // printf("LM_ch(): %f ms\n",time);
+
+}
+
+void PairRANN::conjugate_gradient(){
+	//jlen is number of rows; betalen is number of columns of jacobian
+	char str[MAXLINE];
+	int iter,jlen,i,jlenv,j,jlen2,nn;
+	bool goodstep=true;
+	double energy_fit,energy_fit1,energy_fitv,reg_fit,reg_fit1;
+	double lambda = lambda_initial;
+	double vraise = lambda_increase;
+	double vreduce = lambda_reduce;
+	char line[MAXLINE];
+    this->energy_fitv_best = 10^300;
+	int i_off, j_off, j_offPi;
+	double time1, time2;
+	jlen = count_unique_species(r,nsimr);
+	jlenv = count_unique_species(v,nsimv);
+	speciesnumberr = jlen;
+	speciesnumberv = jlenv;
+	if (targettype==1){
+		jlen = nsimr;
+		jlenv = nsimv;
+	}
+	else if (targettype==3){
+		jlen = natomsr;
+		jlenv = natomsv;
+	}
+	jlen2 = jlen;
+	if (doregularizer)jlen += betalen;//do not regulate last bias
+	jlen1 = jlen;
+	sprintf(str,"types=%d; betalen=%d; jlen1=%d; jlen2=%d, regularization:%d\n",nelementsp,betalen,jlen1,jlen2, doregularizer);
+	std::cout<<str;
+	double J[jlen1*betalen];
+	double target[jlen1];
+	double target1[jlen1];
+	double target2[jlen1];
+	double targetv[jlenv];
+	double beta[betalen];
+	double beta1[betalen];
+	double beta2[betalen];
+	double dX[betalen];
+	double dX1[betalen];
+	double *dXp;
+	double *dXp1;
+	double s[betalen];
+	double bpr;
+	double *dp;
+	double delta[jlen1];//extra length used internally in qrsolve
+	dp = delta;
+    double *tp,*tp1,*tp2,*bp,*bp1,*bp2,*Jp,*Jp1,*sp;
+	tp = target;
+	tp1 = target1;
+	tp2 = target2;
+	bp = beta;
+	bp1 = beta1;
+	bp2 = beta2;
+	Jp = J;
+	dXp = dX;
+	dXp1 = dX1;
+	sp = s;
+	energy_fit = reg_fit = energy_fit1 = reg_fit1 = 0.0;
+	//clock_t start1 = clock();
+	double start_time_tot = omp_get_wtime();
+	jacobian_convolution(Jp,tp,r,nsimr,natomsr,net);
+	NNarchitecture net1[nelementsp];
+	NNarchitecture net2[nelementsp];
+	copy_network(net,net1);
+	copy_network(net,net2);
+	for (i=0;i<nsimr;i++){
+		energy_fit += tp[i]*tp[i];
+	}
+	double e3 = energy_fit;
+	energy_fit/=jlen2;
+	if (doregularizer){
+		for (i=1;i<betalen;i++){
+			i_off = i+jlen-betalen;
+			reg_fit +=tp[i_off]*tp[i_off];
+		}
+		e3+=reg_fit;
+		reg_fit /= betalen;
+	}
+	double initial_reg = regularizer;
+	double initial_eng = energy_fit;
+	flatten_beta(net,bp);
+	energy_fitv = 0.0;
+	int counter = 0;
+	int count = 0;
+	int count1 = 0;
+	int count2 = 0;
+	int count3 = 0;
+	int count4 = 0;
+	int count5 = 0;
+	int count5spin = 0;
+	int count6 = 0;
+	iter = 0;
+	if (nsimv>0){
+		//do validation forward pass
+		forward_pass(targetv,v,nsimv,net);
+		energy_fitv=0.0;
+		for (i=0;i<nsimv;i++){
+			energy_fitv += targetv[i]*targetv[i];
+		}
+		energy_fitv /= jlenv;
+	}
+	FILE *fid = fopen(log_file,"w");
+	if (fid==NULL)errorf("couldn't open log file!");
+	sprintf(line,"iter: %d, evals: %d, e_err: %.10e, e1: %.10e, ev_err %.10e, r_err: %.10e, lambda: %.10e\n",iter,counter,energy_fit,energy_fit1,energy_fitv,reg_fit,lambda);
+	write_potential_file(true,line,0,initial_reg);
+	printf("%s",line);
+	double start2;
+	//get gradient direction
+	#pragma omp parallel
+	{
+	#pragma omp for
+	for (j=0;j<betalen;j++){
+		dX[j]=0.0;
+		for (i=0;i<jlen2;i++){
+			dXp[j]+=2*Jp[i*betalen+j]*tp[i];
+		}
+		if (doregularizer){
+			dXp[j]+=2*Jp[(jlen2+j)*betalen+j]*tp[jlen2+j];
+		}
+	}
+	}
+	//set initial conjugate direction
+	bpr = 0.0;
+	for (j=0;j<betalen;j++){
+		sp[j]=dXp[j];
+	}
+	while (iter<max_epochs){
+		//line search
+		double Gmag = 0.0;
+		double G1mag = 0.0;
+		#pragma omp parallel for reduction(+:Gmag,G1mag)
+		for (j=0;j<betalen;j++){
+			Gmag += sp[j]*sp[j];
+			G1mag += dXp[j]*dXp[j];
+		}
+		Gmag = sqrt(Gmag);
+		G1mag = sqrt(G1mag);
+		double R = sqrt(5.0)*0.5-0.5;
+		double C = 1.0-R;
+		double alpha_min = e3/G1mag;
+		double alpha_max = alpha_min*(3-log(e3/jlen2)); 
+		if (alpha_max<alpha_min*3){alpha_max=alpha_min*3;}
+		int nIter = ceil(-2.078087*log(tolerance/abs(4*alpha_min)));
+		//int nIter = 5;
+		double x1 = (R*alpha_min+C*alpha_max)/Gmag;
+		double x2 = (C*alpha_min+R*alpha_max)/Gmag;
+		//printf("range: %f %f %f %f\n",alpha_min,x1*Gmag,x2*Gmag,alpha_max);
+		#pragma omp parallel for
+		for (j=0;j<betalen;j++){
+			bp1[j] = bp[j]+x1*sp[j];
+			bp2[j] = bp[j]+x2*sp[j];
+		}
+		unflatten_beta(net1,bp1);
+		unflatten_beta(net2,bp2);
+		forward_pass(tp1,r,nsimr,net1);
+		forward_pass(tp2,r,nsimr,net2);
+		double e1;
+		double e2;
+		double *temp;
+		e1 = 0.0;
+		e2 = 0.0;
+		#pragma omp parallel 
+		{
+		#pragma omp for reduction(+:e1,e2)
+		for (i=0;i<jlen1;i++){
+			e1 += tp1[i]*tp1[i];
+			e2 += tp2[i]*tp2[i];
+		}
+		}
+		for (i=0;i<nIter;i++){
+			//printf("%d %f %f %f\n",nIter,e1/jlen2,e2/jlen2,e3/jlen2);
+			//printf("range: %f %f %f %f\n",alpha_min,x1*Gmag,x2*Gmag,alpha_max);
+			if (e1 > e2 && e3 > e2){
+				alpha_min = x1*Gmag;
+				x1 = x2;
+				e1 = e2;
+				temp = tp1;
+				tp1 = tp2;
+				tp2 = temp;
+				temp = bp1;
+				bp1 = bp2;
+				bp2 = temp;
+				x2 = (C*alpha_min+R*alpha_max)/Gmag;
+				//#pragma omp for
+				#pragma omp parallel for
+				for (j=0;j<betalen;j++){
+					bp2[j] = bp[j]+x2*sp[j];
+				}
+				//#pragma omp single
+				//{
+				unflatten_beta(net2,bp2);
+				forward_pass(tp2,r,nsimr,net2);
+				//}
+				e2 = 0.0;
+				#pragma omp parallel
+				{
+				#pragma omp for reduction(+:e2)
+				for (j=0;j<jlen1;j++){
+					e2+=tp2[j]*tp2[j];
+				}
+				}
+			}
+			else if (e2 > e1 && e3 > e1){
+				alpha_max = x2*Gmag;
+				x2 = x1;
+				e2 = e1;
+				temp = tp2;
+				tp2 = tp1;
+				tp1 = temp;
+				temp = bp2;
+				bp2 = bp1;
+				bp1 = temp;
+				x1 = (R*alpha_min+C*alpha_max)/Gmag;
+
+				//#pragma omp for
+				#pragma omp parallel for
+				for (j=0;j<betalen;j++){
+					bp1[j] = bp[j]+x1*sp[j];
+				}
+				//#pragma omp single
+				//{
+				unflatten_beta(net1,bp1);
+				forward_pass(tp1,r,nsimr,net1);
+				//}
+				e1 = 0.0;
+				#pragma omp parallel
+				{
+				#pragma omp for reduction(+ : e1)
+				for (j=0;j<jlen1;j++){
+					e1+=tp1[j]*tp1[j];
+				}
+				}
+			}
+			else {
+				alpha_max = x1*Gmag;
+				alpha_min = 0.0;
+				x1 = (R*alpha_min+C*alpha_max)/Gmag;
+				x2 = (C*alpha_min+R*alpha_max)/Gmag;
+
+				//#pragma omp for
+				#pragma omp parallel for
+				for (j=0;j<betalen;j++){
+					bp1[j] = bp[j]+x1*sp[j];
+					bp2[j] = bp[j]+x2*sp[j];
+				}
+				//#pragma omp single
+				//{
+				unflatten_beta(net1,bp1);
+				unflatten_beta(net2,bp2);
+				forward_pass(tp1,r,nsimr,net1);
+				forward_pass(tp2,r,nsimr,net2);
+				//}
+				e1 = 0.0;
+				e2 = 0.0;
+				#pragma omp parallel
+				{
+				#pragma omp for reduction(+ : e1,e2)
+				for (j=0;j<jlen1;j++){
+					e1 += tp1[j]*tp1[j];
+					e2 += tp2[j]*tp2[j];
+				}
+				}
+			}
+		}
+		if (e2<e1 && e2<e3) {
+			temp = bp;
+			bp = bp2;
+			bp2 = temp;
+		}
+		else if (e1<e3 && e1<e3) {
+			temp = bp;
+			bp = bp1;
+			bp1 = temp;
+		}
+		else {
+			#pragma omp parallel for
+			for (i=0;i<betalen;i++){
+				bp[i] = 0.5*(bp[i]+bp1[i]);
+			}
+		}
+		unflatten_beta(net,bp);
+		jacobian_convolution(Jp,tp,r,nsimr,natomsr,net);
+		energy_fit = 0.0;
+		#pragma omp parallel
+		{
+		#pragma omp for reduction(+ : energy_fit)
+		for (i=0;i<jlen2;i++){
+			energy_fit += tp[i]*tp[i];
+		}
+		}
+		e3 = energy_fit;
+		energy_fit/=jlen2;
+		if (doregularizer){
+			reg_fit = 0.0;
+			for (i=0;i<betalen;i++){
+				reg_fit+=tp[jlen2+i]*tp[jlen2+i];
+			}
+			e3+=reg_fit;
+			reg_fit/=betalen;
+		}
+		start2 = omp_get_wtime();
+		if (nsimv>0){
+			//do validation forward pass
+			forward_pass(targetv,v,nsimv,net);
+			if (debug_level1_freq>0)write_debug_level1(tp,targetv);
+			energy_fitv=0.0;
+			#pragma omp parallel for reduction(+:energy_fitv)
+			for (i=0;i<nsimv;i++){
+				energy_fitv += targetv[i]*targetv[i];
+			}
+			energy_fitv /= jlenv;
+		}
+        bool is_write_potential = false;
+        if (count == potential_output_freq){
+			count = 0;
+			if ((energy_fitv*natomsv+energy_fit*natomsr)/natoms < this->energy_fitv_best) {
+				this->energy_fitv_best = (energy_fitv*natomsv+energy_fit*natomsr)/natoms;
+				is_write_potential = true;
+			}
+			else {
+				count--;
+			}
+        }
+		double adexp = 0.1;
+		if (adaptive_regularizer) {regularizer *= sqrt(initial_reg/reg_fit*energy_fit);}
+		if (regularizer<1e-8){
+			doregularizer=false;
+			jlen -=betalen;
+			jlen1 = jlen;
+		}
+		sprintf(line,"Niter: %d, evals: %d, e_err: %.10e, ev_err %.10e, r_err: %.10e\n",nIter,counter,energy_fit,energy_fitv,reg_fit);
+		std::cout<<line;
+		fprintf(fid,"%s",line);
+		count++;
+		count1++;
+		count2++;
+		count3++;
+		count4++;
+		count5++;
+		count5spin++;
+		count6++;
+        if (is_write_potential){
+            write_potential_file(true,line,counter,initial_reg);
+        }
+        if (count1==debug_level1_freq){
+			write_debug_level1(tp,targetv);
+			count1=0;
+		}
+		if (count2==debug_level2_freq){
+			write_debug_level2(tp,targetv);
+			count2=0;
+		}
+		if (count3==debug_level3_freq){
+			//always print the ones computed last, regardless of whether the step was good.
+			if (goodstep){
+				write_debug_level3(Jp,tp,bp,dp);
+			}
+			else {
+				write_debug_level3(Jp1,tp1,bp1,dp);
+			}
+			count3=0;
+		}
+		if (count4==debug_level4_freq){
+			write_debug_level4(tp,targetv);
+			count4=0;
+		}
+		if (count5==debug_level5_freq){
+			write_debug_level5(tp,targetv);
+			count5=0;
+		}
+		if (count5==debug_level5_spin_freq){
+			write_debug_level5_spin(tp,targetv);
+			count5spin=0;
+		}
+		counter++;
+		//get new gradient direction
+		double *tempdX;
+		tempdX = dXp;
+		dXp = dXp1;
+		dXp1 = tempdX;
+		double numen;
+		double denom;
+		numen = 0.0;
+		denom = 0.0;
+		#pragma omp parallel
+		{
+		#pragma omp for
+		for (j=0;j<betalen;j++){
+			dXp[j]=0.0;
+			for (i=0;i<jlen2;i++){
+				dXp[j]+=2*Jp[i*betalen+j]*tp[i];
+			}
+			if (doregularizer){
+				dXp[j]+=2*Jp[(jlen2+j)*betalen+j]*tp[jlen2+j];
+			}
+		}
+		#pragma omp barrier
+		//get betapr
+		#pragma omp for reduction(+:numen,denom)
+		for (j=0;j<betalen;j++){
+			//printf("%f %f\n",dXp[j],dXp1[j]);
+			numen += dXp[j]*(dXp[j]-dXp1[j]);
+			denom += dXp[j]*dXp1[j];
+		}
+		#pragma omp single
+		{
+		bpr = numen/denom;
+		}
+		//printf("%f %f %f\n",bpr,numen,denom);
+		if (bpr<0.0){
+			#pragma omp single
+			{
+			temp = sp;
+			sp = dXp;
+			dXp = temp;
+			}
+		}
+		else{
+			//update conjugate direction
+			#pragma omp for
+			for (j=0;j<betalen;j++){
+				sp[j] = dXp[j]+bpr*sp[j];
+			}
+		}
+		}
+		
+		if (energy_fit<tolerance){
+			std::cout<<"Terminating because reached convergence tolerance\n";
+			write_potential_file(true,line,iter,initial_reg);
+			break;
+		}
+	}
+	//delete dynamic memory use
+	for (int i=0;i<=nelements;i++){
+		if (net1[i].layers>0){
+			for (int j=0;j<net1[i].layers-1;j++){
+				delete [] net1[i].bundleinputsize[j];
+				delete [] net1[i].bundleoutputsize[j];
+				for (int k=0;k<net1[i].bundles[j];k++){
+					delete [] net1[i].bundleinput[j][k];
+					delete [] net1[i].bundleoutput[j][k];
+					delete [] net1[i].bundleW[j][k];
+					delete [] net1[i].bundleB[j][k];
+					delete [] net1[i].freezeW[j][k];
+					delete [] net1[i].freezeB[j][k];
+				}
+				delete [] net1[i].bundleinput[j];
+				delete [] net1[i].bundleoutput[j];
+				delete [] net1[i].bundleW[j];
+				delete [] net1[i].bundleB[j];
+				delete [] net1[i].freezeW[j];
+				delete [] net1[i].freezeB[j];
+			}
+			delete [] net1[i].bundleinput;
+			delete [] net1[i].bundleoutput;
+			delete [] net1[i].bundleW;
+			delete [] net1[i].bundleB;
+			delete [] net1[i].freezeW;
+			delete [] net1[i].freezeB;
+			delete [] net1[i].dimensions;
+			delete [] net1[i].startI;
+		}
+	}
+
+	// clock_t end = clock();
+    // time1 = (double) (end-start1) / CLOCKS_PER_SEC * 1000.0;
+	// sprintf(str,"LM_ch(): %f ms\n",time1);
+	// std::cout<<str;
+    double time = (double) (omp_get_wtime() - start_time_tot)*1000.0;
+    // printf("LM_ch(): %f ms\n",time);
+
+}
+
+//top level run function, calls compute_jacobian and qrsolve. Cannot be parallelized.
+void PairRANN::levenburg_marquardt_linesearch(){
+	//jlen is number of rows; betalen is number of columns of jacobian
+	char str[MAXLINE];
+	int iter,jlen,i,jlenv,j,jlen2,nn;
+	bool goodstep=true;
+	double energy_fit,energy_fit1,energy_fitv,force_fit,force_fitv,force_fit1,reg_fit,reg_fit1;
+	double lambda = lambda_initial;
+	double vraise = lambda_increase;
+	double vreduce = lambda_reduce;
+	char line[MAXLINE];
+    this->energy_fitv_best = 10^300;
+	int i_off, j_off, j_offPi;
+	double time1, time2;
+	jlen = count_unique_species(r,nsimr);
+	jlenv = count_unique_species(v,nsimv);
+	speciesnumberr = jlen;
+	speciesnumberv = jlenv;
+	if (targettype==1){
+		jlen = nsimr;
+		jlenv = nsimv;
+	}
+	else if (targettype==3){
+		jlen = natomsr;
+		jlenv = natomsv;
+	}
+	if (doforces){
+		jlen += natoms*3;
+		jlenv += natoms*3;
+	}
+	jlen2 = jlen;
+	if (doregularizer)jlen += betalen;//do not regulate last bias
+	jlen1 = jlen;
+		sprintf(str,"types=%d; betalen=%d; jlen1=%d; jlen2=%d, regularization:%d\n",nelementsp,betalen,jlen1,jlen2, doregularizer);
+	std::cout<<str;
+	double J[jlen1*betalen];
+	double J1[jlen1*betalen];
+	double J2[betalen*betalen];
+	double t2[betalen];
+	double target[jlen1];
+	double target1[jlen1];
+	double target2[jlen1];
+	double targetv[jlenv];
+	double beta[betalen];
+	double beta1[betalen];
+	double beta2[betalen];
+	double D[betalen];
+	double *dp;
+	double delta[jlen1];//extra length used internally in qrsolve
+	dp = delta;
+//	double *Jp = J;
+//	double *Jp1 = J1;
+    double *tp,*tp1,*tp2,*bp,*bp1,*bp2,*Jp,*Jp1;
+	tp = target;
+	tp1 = target1;
+	tp2 = target2;
+	bp = beta;
+	bp1 = beta1;
+	bp2 = beta2;
+	Jp = J;
+	Jp1 = J1;
+	force_fit = energy_fit = reg_fit = energy_fit1 = force_fit1 = reg_fit1 = 0.0;
+	//clock_t start1 = clock();
+	double start_time_tot = omp_get_wtime();
+	jacobian_convolution(Jp,tp,r,nsimr,natomsr,net);
+
+	NNarchitecture net1[nelementsp];
+	NNarchitecture net2[nelementsp];
+	copy_network(net,net1);
+	copy_network(net,net2);
+	for (i=0;i<nsimr;i++){
+		energy_fit += tp[i]*tp[i];
+	}
+	double e3 = energy_fit;
+	energy_fit/=jlen2;
+	if (doforces){
+		for (i=nsimr;i<nsimr+natoms*3;i++)force_fit +=tp[i]*tp[i];
+		force_fit/=natomsr*3;
+	}
+	if (doregularizer){
+		for (i=1;i<betalen;i++){
+			i_off = i+jlen-betalen;
+			reg_fit +=tp[i_off]*tp[i_off];
+		}
+		e3 += reg_fit;
+		reg_fit /= betalen;
+	}
+	double initial_reg = regularizer;
+	double initial_eng = energy_fit;
+	flatten_beta(net,bp);
+	force_fitv = energy_fitv = 0.0;
+	int counter = 0;
+	int count = 0;
+	int count1 = 0;
+	int count2 = 0;
+	int count3 = 0;
+	int count4 = 0;
+	int count5 = 0;
+	int count5spin = 0;
+	int count6 = 0;
+	iter = 0;
+	FILE *fid = fopen(log_file,"w");
+	if (fid==NULL)errorf("couldn't open log file!");
+	if (doforces){
+		sprintf(line,"iter: %d, evals: %d, e_err: %.10e, e1: %.10e, ev_err %.10e, f_err: %.10e, fv_err %.10e, r_err: %.10e, lambda: %.10e\n",iter,counter,energy_fit,energy_fit1,energy_fitv,force_fit,force_fitv,reg_fit,lambda);
+	}
+	else{
+		sprintf(line,"iter: %d, evals: %d, e_err: %.10e, e1: %.10e, ev_err %.10e, r_err: %.10e, lambda: %.10e\n",iter,counter,energy_fit,energy_fit1,energy_fitv,reg_fit,lambda);
+	}
+	write_potential_file(true,line,0,initial_reg);
+	double start2;
+	while (iter<max_epochs){
+		if (nsimv>0){
+			//do validation forward pass
+			forward_pass(targetv,v,nsimv,net);
+			if (debug_level1_freq>0)write_debug_level1(tp,targetv);
+			energy_fitv=0.0;
+			for (i=0;i<nsimv;i++){
+				energy_fitv += targetv[i]*targetv[i];
+			}
+			energy_fitv /= jlenv;
+		}
+		else{
+			energy_fitv = 0.0;
+		}
+
+		for (i=0;i<betalen;i++){
+			i_off = i*betalen;
+			for (int k=0;k<=i;k++){
+				J2[i_off+k] = 0.0;
+			}
+		}
+
+		#pragma omp parallel
+		{
+		#pragma omp for
+		for (int i=0;i<betalen;i++){
+			int i_off = i*betalen;
+			for (int k=0;k<=i;k++){
+				for (int j=0;j<jlen2;j++){
+					int j_off = j*betalen;
+					int j_offPi = j_off+i;
+					J2[i_off+k] += Jp[j_offPi]*Jp[j_off+k];
+				}
+			}
+		}
+
+		if (doregularizer){
+			#pragma omp for
+			for (int i=0;i<betalen;i++){
+				int	i_off = i*betalen;
+				int ij_off = jlen2*betalen + i_off;
+				J2[i_off+i]+=Jp[ij_off+i]*Jp[ij_off+i];
+			}
+		}
+
+		#pragma omp barrier
+		#pragma omp single
+		{
+		for (int i=0;i<betalen;i++){
+			D[i] = J2[i*betalen+i];
+			if (D[i]==0){errorf(FLERR,"Jacobian is rank deficient!\n");}//one or more weight/bias has no effect on the computed energy of any of the atoms.
+			if (doregularizer) // t2 can be initialized with 0 or derivative w.r.t. weight
+				t2[i]=Jp[jlen2*betalen+i*betalen+i]*tp[jlen2+i];
+			else
+				t2[i]=0;
+		}
+		}
+		// loop splitting for threading. Initialization for t2 is done above.
+		#pragma omp for
+		for (int i=0;i<betalen;i++){
+			// t2[i]=0;
+			for (j=0;j<jlen2;j++){
+				//printf("%d %f\n",j,tp[j]);
+				t2[i]+=Jp[j*betalen+i]*tp[j];
+			}
+		}
+
+		}
+		double adexp = 0.1;
+		if (adaptive_regularizer) {regularizer *= sqrt(initial_reg/reg_fit*energy_fit);}
+		if (regularizer<1e-8){
+			doregularizer=false;
+			jlen -=betalen;
+			jlen1 = jlen;
+		}
+
+        bool is_write_potential = false;
+        if (count == potential_output_freq){
+			count = 0;
+			if ((energy_fitv*natomsv+energy_fit*natomsr)/natoms < this->energy_fitv_best) {
+				this->energy_fitv_best = (energy_fitv*natomsv+energy_fit*natomsr)/natoms;
+				is_write_potential = true;
+			}
+			else {
+				count--;
+			}
+        }
+		if (doforces){
+			sprintf(line,"iter: %d, evals: %d, e_err: %.10e, e1: %.10e, ev_err %.10e, f_err: %.10e, fv_err %.10e, r_err: %.10e, lambda: %.10e\n",iter,counter,energy_fit,energy_fit1,energy_fitv,force_fit,force_fitv,reg_fit,lambda);
+		}
+		else{
+			sprintf(line,"iter: %d, evals: %d, e_err: %.10e, e1: %.10e, ev_err %.10e, r_err: %.10e, lambda: %.10e\n",iter,counter,energy_fit,energy_fit1,energy_fitv,reg_fit,lambda);
+		}
+		std::cout<<line;
+		fprintf(fid,"%s",line);
+		count++;
+		count1++;
+		count2++;
+		count3++;
+		count4++;
+		count5++;
+		count5spin++;
+		count6++;
+        if (is_write_potential){
+            write_potential_file(true,line,iter,initial_reg);
+        }
+        if (count1==debug_level1_freq){
+			write_debug_level1(tp,targetv);
+			count1=0;
+		}
+		if (count2==debug_level2_freq){
+			write_debug_level2(tp,targetv);
+			count2=0;
+		}
+		if (count3==debug_level3_freq){
+			//always print the ones computed last, regardless of whether the step was good.
+			if (goodstep){
+				write_debug_level3(Jp,tp,bp,dp);
+			}
+			else {
+				write_debug_level3(Jp1,tp1,bp1,dp);
+			}
+			count3=0;
+		}
+		if (count4==debug_level4_freq){
+			write_debug_level4(tp,targetv);
+			count4=0;
+		}
+		if (count5==debug_level5_freq){
+			write_debug_level5(tp,targetv);
+			count5=0;
+		}
+		if (count5==debug_level5_spin_freq){
+			write_debug_level5_spin(tp,targetv);
+			count5spin=0;
+		}
+		if (count6==debug_level6_freq){
+			write_debug_level6(tp,targetv);
+			count6=0;
+		}
+		counter++;
+
+		double lambda_min = lambda_reduce*lambda;
+		double lambda_max = lambda_increase*lambda;
+		double R = sqrt(5.0)*0.5-0.5;
+		double C = 1.0-R;
+		int nIter = ceil(-2.078087*log(tolerance/(lambda_max-lambda_min)));
+		nIter = 7;
+		double x1 = (R*lambda_min+C*lambda_max);
+		double x2 = (C*lambda_min+R*lambda_max);
+
+		#pragma omp for
+		for (i=0;i<betalen;i++){
+			J2[i*betalen+i]=D[i]+sqrt(D[i]*x1);
+		}
+		chsolve(J2,betalen,t2,dp);
+		#pragma omp for
+		for (i=0;i<betalen;i++){
+			bp1[i]=bp[i]+dp[i];
+		}
+		unflatten_beta(net1,bp1);
+		forward_pass(tp1,r,nsimr,net1);
+		#pragma omp for
+		for (i=0;i<betalen;i++){
+			J2[i*betalen+i]=D[i]+sqrt(D[i]*x2);
+		}
+		chsolve(J2,betalen,t2,dp);
+		#pragma omp for
+		for (i=0;i<betalen;i++){
+			bp2[i]=bp[i]+dp[i];
+		}
+		unflatten_beta(net2,bp2);
+		forward_pass(tp2,r,nsimr,net2);
+		double e1;
+		double e2;
+		double *temp;
+		e1 = 0.0;
+		e2 = 0.0;
+		#pragma omp parallel 
+		{
+		#pragma omp for reduction(+:e1,e2)
+		for (i=0;i<jlen1;i++){
+			e1 += tp1[i]*tp1[i];
+			e2 += tp2[i]*tp2[i];
+		}
+		}
+		for (int ii=0;ii<nIter;ii++){
+			//printf("range: %f %f %f %f\n",lambda_min,x1,x2,lambda_max);
+			//printf("ii: %d es: e3 %f e2 %f e1 %f\n",ii,e3,e2,e1);
+			if (e1 > e2 && e3 > e2){
+				lambda_min = x1;
+				x1 = x2;
+				e1 = e2;
+				temp = tp1;
+				tp1 = tp2;
+				tp2 = temp;
+				temp = bp1;
+				bp1 = bp2;
+				bp2 = temp;
+				x2 = C*lambda_min+R*lambda_max;
+				#pragma omp for
+				for (i=0;i<betalen;i++){
+					J2[i*betalen+i]=D[i]+sqrt(D[i]*x2);
+				}
+				chsolve(J2,betalen,t2,dp);
+				#pragma omp for
+				for (i=0;i<betalen;i++){
+					bp2[i]=bp[i]+dp[i];
+				}
+				unflatten_beta(net2,bp2);
+				forward_pass(tp2,r,nsimr,net2);
+				e2 = 0.0;
+				#pragma omp parallel
+				{
+				#pragma omp for reduction(+:e2)
+				for (j=0;j<jlen1;j++){
+					e2+=tp2[j]*tp2[j];
+				}
+				}
+			}
+			else if (e2 > e1 && e3 > e1){
+				lambda_max = x2;
+				x2 = x1;
+				e2 = e1;
+				temp = tp2;
+				tp2 = tp1;
+				tp1 = temp;
+				temp = bp2;
+				bp2 = bp1;
+				bp1 = temp;
+				x1 = R*lambda_min+C*lambda_max;
+				#pragma omp for
+				for (i=0;i<betalen;i++){
+					J2[i*betalen+i]=D[i]+sqrt(D[i]*x1);
+				}
+				chsolve(J2,betalen,t2,dp);
+				#pragma omp for
+				for (i=0;i<betalen;i++){
+					bp1[i]=bp[i]+dp[i];
+				}
+				unflatten_beta(net1,bp1);
+				forward_pass(tp1,r,nsimr,net1);
+				e1 = 0.0;
+				#pragma omp parallel
+				{
+				#pragma omp for reduction(+ : e1)
+				for (j=0;j<jlen1;j++){
+					e1+=tp1[j]*tp1[j];
+				}
+				}
+			}
+			else {
+				lambda_max = lambda*lambda_increase*lambda_increase;
+				lambda_min = lambda*lambda_increase;
+				x1 = R*lambda_min+C*lambda_max;
+				x2 = C*lambda_min+R*lambda_max;
+				#pragma omp for
+				for (i=0;i<betalen;i++){
+					J2[i*betalen+i]=D[i]+sqrt(D[i]*x1);
+				}
+				chsolve(J2,betalen,t2,dp);
+				#pragma omp for
+				for (i=0;i<betalen;i++){
+					bp1[i]=bp[i]+dp[i];
+				}
+				unflatten_beta(net1,bp1);
+				forward_pass(tp1,r,nsimr,net1);
+				#pragma omp for
+				for (i=0;i<betalen;i++){
+					J2[i*betalen+i]=D[i]+sqrt(D[i]*x2);
+				}
+				chsolve(J2,betalen,t2,dp);
+				#pragma omp for
+				for (i=0;i<betalen;i++){
+					bp2[i]=bp[i]+dp[i];
+				}
+				unflatten_beta(net2,bp2);
+				forward_pass(tp2,r,nsimr,net2);
+				e1 = 0.0;
+				e2 = 0.0;
+				#pragma omp parallel
+				{
+				#pragma omp for reduction(+ : e1,e2)
+				for (j=0;j<jlen1;j++){
+					e1 += tp1[j]*tp1[j];
+					e2 += tp2[j]*tp2[j];
+				}
+				}
+			}
+		}
+		if (e2<e1 && e2<e3) {
+			temp = bp;
+			bp = bp2;
+			bp2 = temp;
+			lambda = x2;
+			unflatten_beta(net,bp);
+			jacobian_convolution(Jp,tp,r,nsimr,natomsr,net);
+		}
+		else if (e1<e3 && e1<e3) {
+			temp = bp;
+			bp = bp1;
+			bp1 = temp;
+			lambda = x1;
+			unflatten_beta(net,bp);
+			jacobian_convolution(Jp,tp,r,nsimr,natomsr,net);
+		}
+		else {
+			lambda = lambda*lambda_increase;
+		}
+		energy_fit = 0.0;
+		#pragma omp parallel
+		{
+		#pragma omp for reduction(+ : energy_fit)
+		for (i=0;i<jlen2;i++){
+			energy_fit += tp[i]*tp[i];
+		}
+		}
+		e3 = energy_fit;
+		energy_fit/=jlen2;
+		if (doregularizer){
+			reg_fit1 = 0.0;
+			for (i=1;i<betalen;i++){
+				i_off = i+jlen-betalen;
+				reg_fit += tp1[i_off]*tp1[i_off];
+			}
+			e3+=reg_fit;
+			reg_fit /= betalen;
+		}
+		iter++;
+	}
+	//delete dynamic memory use
+	for (int i=0;i<=nelements;i++){
+		if (net1[i].layers>0){
+			for (int j=0;j<net1[i].layers-1;j++){
+				delete [] net1[i].bundleinputsize[j];
+				delete [] net1[i].bundleoutputsize[j];
+				for (int k=0;k<net1[i].bundles[j];k++){
+					delete [] net1[i].bundleinput[j][k];
+					delete [] net1[i].bundleoutput[j][k];
+					delete [] net1[i].bundleW[j][k];
+					delete [] net1[i].bundleB[j][k];
+					delete [] net1[i].freezeW[j][k];
+					delete [] net1[i].freezeB[j][k];
+				}
+				delete [] net1[i].bundleinput[j];
+				delete [] net1[i].bundleoutput[j];
+				delete [] net1[i].bundleW[j];
+				delete [] net1[i].bundleB[j];
+				delete [] net1[i].freezeW[j];
+				delete [] net1[i].freezeB[j];
+			}
+			delete [] net1[i].bundleinput;
+			delete [] net1[i].bundleoutput;
+			delete [] net1[i].bundleW;
+			delete [] net1[i].bundleB;
+			delete [] net1[i].freezeW;
+			delete [] net1[i].freezeB;
+			delete [] net1[i].dimensions;
+			delete [] net1[i].startI;
+		}
+	}
+
+	// clock_t end = clock();
+    // time1 = (double) (end-start1) / CLOCKS_PER_SEC * 1000.0;
+	// sprintf(str,"LM_ch(): %f ms\n",time1);
+	// std::cout<<str;
+    double time = (double) (omp_get_wtime() - start_time_tot)*1000.0;
+    // printf("LM_ch(): %f ms\n",time);
+
+}
+
+void PairRANN::bfgs(){
+	//jlen is number of rows; betalen is number of columns of jacobian
+	char str[MAXLINE];
+	int iter,jlen,i,jlenv,j,jlen2,nn;
+	bool goodstep=true;
+	double energy_fit,energy_fit1,energy_fitv,reg_fit,reg_fit1;
+	double lambda = lambda_initial;
+	double vraise = lambda_increase;
+	double vreduce = lambda_reduce;
+	char line[MAXLINE];
+    this->energy_fitv_best = 10^300;
+	int i_off, j_off, j_offPi;
+	double time1, time2;
+	bool reset = false;
+	jlen = count_unique_species(r,nsimr);
+	jlenv = count_unique_species(v,nsimv);
+	speciesnumberr = jlen;
+	speciesnumberv = jlenv;
+	if (targettype==1){
+		jlen = nsimr;
+		jlenv = nsimv;
+	}
+	else if (targettype==3){
+		jlen = natomsr;
+		jlenv = natomsv;
+	}
+	jlen2 = jlen;
+	if (doregularizer)jlen += betalen;//do not regulate last bias
+	jlen1 = jlen;
+	sprintf(str,"types=%d; betalen=%d; jlen1=%d; jlen2=%d, regularization:%d\n",nelementsp,betalen,jlen1,jlen2, doregularizer);
+	std::cout<<str;
+	double J[jlen1*betalen];
+	double target[jlen1];
+	double target1[jlen1];
+	double target2[jlen1];
+	double targetv[jlenv];
+	double beta[betalen];
+	double beta1[betalen];
+	double beta2[betalen];
+	double dX[betalen];
+	double dX1[betalen];
+	double *dXp;
+	double *dXp1;
+	double s[betalen];
+	double y[betalen];
+	double Hy[betalen];
+	double H[betalen*betalen];
+	double bpr;
+	double *dp;
+	double delta[jlen1];//extra length used internally in qrsolve
+	dp = delta;
+    double *tp,*tp1,*tp2,*bp,*bp1,*bp2,*Jp,*Jp1,*sp,*Hp;
+	tp = target;
+	tp1 = target1;
+	tp2 = target2;
+	bp = beta;
+	bp1 = beta1;
+	bp2 = beta2;
+	Jp = J;
+	dXp = dX;
+	dXp1 = dX1;
+	sp = s;
+	Hp = H;
+	energy_fit = reg_fit = energy_fit1 = reg_fit1 = 0.0;
+	//clock_t start1 = clock();
+	double start_time_tot = omp_get_wtime();
+	jacobian_convolution(Jp,tp,r,nsimr,natomsr,net);
+	NNarchitecture net1[nelementsp];
+	NNarchitecture net2[nelementsp];
+	copy_network(net,net1);
+	copy_network(net,net2);
+	for (i=0;i<nsimr;i++){
+		energy_fit += tp[i]*tp[i];
+	}
+	double e3 = energy_fit;
+	energy_fit/=jlen2;
+	if (doregularizer){
+		for (i=1;i<betalen;i++){
+			i_off = i+jlen-betalen;
+			reg_fit +=tp[i_off]*tp[i_off];
+		}
+		e3+=reg_fit;
+		reg_fit /= betalen;
+	}
+	double initial_reg = regularizer;
+	double initial_eng = energy_fit;
+	flatten_beta(net,bp);
+	energy_fitv = 0.0;
+	int counter = 0;
+	int count = 0;
+	int count1 = 0;
+	int count2 = 0;
+	int count3 = 0;
+	int count4 = 0;
+	int count5 = 0;
+	int count5spin = 0;
+	int count6 = 0;
+	iter = 0;
+	if (nsimv>0){
+		//do validation forward pass
+		forward_pass(targetv,v,nsimv,net);
+		energy_fitv=0.0;
+		for (i=0;i<nsimv;i++){
+			energy_fitv += targetv[i]*targetv[i];
+		}
+		energy_fitv /= jlenv;
+	}
+	FILE *fid = fopen(log_file,"w");
+	if (fid==NULL)errorf("couldn't open log file!");
+	sprintf(line,"iter: %d, evals: %d, e_err: %.10e, e1: %.10e, ev_err %.10e, r_err: %.10e, lambda: %.10e\n",iter,counter,energy_fit,energy_fit1,energy_fitv,reg_fit,lambda);
+	write_potential_file(true,line,0,initial_reg);
+	printf("%s",line);
+	double start2;
+	double x1 = 0.0;
+	double x2 = 1.0;
+	//get gradient direction
+	#pragma omp parallel
+	{
+	#pragma omp for
+	for (j=0;j<betalen;j++){
+		dX[j]=0.0;
+		for (i=0;i<jlen2;i++){
+			dXp[j]+=2*Jp[i*betalen+j]*tp[i];
+		}
+		if (doregularizer){
+			dXp[j]+=2*Jp[(jlen2+j)*betalen+j]*tp[jlen2+j];
+		}
+	}
+	}
+	for (j=0;j<betalen;j++){
+		for (int k=0;k<betalen;k++){
+			H[j*betalen+k]=0.0;
+		}
+		H[j*betalen+j]=1.0;
+	}
+	//set initial conjugate direction
+	for (j=0;j<betalen;j++){
+		sp[j]=dXp[j];
+	}
+	while (iter<max_epochs){
+		//line search
+		double Gmag = 0.0;
+		double G1mag = 0.0;
+		#pragma omp parallel for reduction(+:Gmag,G1mag)
+		for (j=0;j<betalen;j++){
+			Gmag += sp[j]*sp[j];
+			G1mag += dXp[j]*dXp[j];
+		}
+		Gmag = sqrt(Gmag);
+		G1mag = sqrt(G1mag);
+		double R = sqrt(5.0)*0.5-0.5;
+		double C = 1.0-R;
+		double alpha_min = e3/G1mag;
+		double alpha_max = alpha_min*(5-4*log(e3/jlen2)); 
+		if (alpha_max<alpha_min*5){alpha_max=alpha_min*5;}
+		int nIter = ceil(-2.078087*log(tolerance/abs(4*alpha_min)));
+		//int nIter = 5;
+		x1 = (R*alpha_min+C*alpha_max)/Gmag;
+		x2 = (C*alpha_min+R*alpha_max)/Gmag;
+		//printf("range: %f %f %f %f\n",alpha_min,x1*Gmag,x2*Gmag,alpha_max);
+		#pragma omp parallel for
+		for (j=0;j<betalen;j++){
+			bp1[j] = bp[j]+x1*sp[j];
+			bp2[j] = bp[j]+x2*sp[j];
+		}
+		unflatten_beta(net1,bp1);
+		unflatten_beta(net2,bp2);
+		forward_pass(tp1,r,nsimr,net1);
+		forward_pass(tp2,r,nsimr,net2);
+		double e1;
+		double e2;
+		double *temp;
+		e1 = 0.0;
+		e2 = 0.0;
+		#pragma omp parallel 
+		{
+		#pragma omp for reduction(+:e1,e2)
+		for (i=0;i<jlen1;i++){
+			e1 += tp1[i]*tp1[i];
+			e2 += tp2[i]*tp2[i];
+		}
+		}
+		for (i=0;i<nIter;i++){
+			//printf("%d %f %f %f\n",nIter,e1/jlen2,e2/jlen2,e3/jlen2);
+			//printf("range: %f %f %f %f\n",alpha_min,x1*Gmag,x2*Gmag,alpha_max);
+			if (e1 > e2 && e3 > e2){
+				alpha_min = x1*Gmag;
+				x1 = x2;
+				e1 = e2;
+				temp = tp1;
+				tp1 = tp2;
+				tp2 = temp;
+				temp = bp1;
+				bp1 = bp2;
+				bp2 = temp;
+				x2 = (C*alpha_min+R*alpha_max)/Gmag;
+				//#pragma omp for
+				#pragma omp parallel for
+				for (j=0;j<betalen;j++){
+					bp2[j] = bp[j]+x2*sp[j];
+				}
+				//#pragma omp single
+				//{
+				unflatten_beta(net2,bp2);
+				forward_pass(tp2,r,nsimr,net2);
+				//}
+				e2 = 0.0;
+				#pragma omp parallel
+				{
+				#pragma omp for reduction(+:e2)
+				for (j=0;j<jlen1;j++){
+					e2+=tp2[j]*tp2[j];
+				}
+				}
+			}
+			else if (e2 > e1 && e3 > e1){
+				alpha_max = x2*Gmag;
+				x2 = x1;
+				e2 = e1;
+				temp = tp2;
+				tp2 = tp1;
+				tp1 = temp;
+				temp = bp2;
+				bp2 = bp1;
+				bp1 = temp;
+				x1 = (R*alpha_min+C*alpha_max)/Gmag;
+
+				//#pragma omp for
+				#pragma omp parallel for
+				for (j=0;j<betalen;j++){
+					bp1[j] = bp[j]+x1*sp[j];
+				}
+				//#pragma omp single
+				//{
+				unflatten_beta(net1,bp1);
+				forward_pass(tp1,r,nsimr,net1);
+				//}
+				e1 = 0.0;
+				#pragma omp parallel
+				{
+				#pragma omp for reduction(+ : e1)
+				for (j=0;j<jlen1;j++){
+					e1+=tp1[j]*tp1[j];
+				}
+				}
+			}
+			else {
+				alpha_max = x1*Gmag;
+				alpha_min = 0.0;
+				x1 = (R*alpha_min+C*alpha_max)/Gmag;
+				x2 = (C*alpha_min+R*alpha_max)/Gmag;
+
+				//#pragma omp for
+				#pragma omp parallel for
+				for (j=0;j<betalen;j++){
+					bp1[j] = bp[j]+x1*sp[j];
+					bp2[j] = bp[j]+x2*sp[j];
+				}
+				//#pragma omp single
+				//{
+				unflatten_beta(net1,bp1);
+				unflatten_beta(net2,bp2);
+				forward_pass(tp1,r,nsimr,net1);
+				forward_pass(tp2,r,nsimr,net2);
+				//}
+				e1 = 0.0;
+				e2 = 0.0;
+				#pragma omp parallel
+				{
+				#pragma omp for reduction(+ : e1,e2)
+				for (j=0;j<jlen1;j++){
+					e1 += tp1[j]*tp1[j];
+					e2 += tp2[j]*tp2[j];
+				}
+				}
+			}
+		}
+		if (e2<e1 && e2<e3) {
+			temp = bp;
+			bp = bp2;
+			bp2 = temp;
+			#pragma omp parallel for
+			for (j=0;j<betalen;j++){
+				sp[j]=sp[j]*x2;
+			}
+		}
+		else if (e1<e3 && e1<e3) {
+			temp = bp;
+			bp = bp1;
+			bp1 = temp;
+			#pragma omp parallel for
+			for (j=0;j<betalen;j++){
+				sp[j]=sp[j]*x1;
+			}
+		}
+		else {
+			#pragma omp parallel for
+			for (i=0;i<betalen;i++){
+				bp[i] = 0.5*(bp[i]+bp1[i]);
+				sp[i] = sp[i]*(x1+x2)*0.5;
+			}
+		}
+		unflatten_beta(net,bp);
+		jacobian_convolution(Jp,tp,r,nsimr,natomsr,net);
+		energy_fit = 0.0;
+		#pragma omp parallel
+		{
+		#pragma omp for reduction(+ : energy_fit)
+		for (i=0;i<jlen2;i++){
+			energy_fit += tp[i]*tp[i];
+		}
+		}
+		e3 = energy_fit;
+		energy_fit/=jlen2;
+		if (doregularizer){
+			reg_fit = 0.0;
+			for (i=0;i<betalen;i++){
+				reg_fit+=tp[jlen2+i]*tp[jlen2+i];
+			}
+			e3+=reg_fit;
+			reg_fit/=betalen;
+		}
+		start2 = omp_get_wtime();
+		if (nsimv>0){
+			//do validation forward pass
+			forward_pass(targetv,v,nsimv,net);
+			if (debug_level1_freq>0)write_debug_level1(tp,targetv);
+			energy_fitv=0.0;
+			#pragma omp parallel for reduction(+:energy_fitv)
+			for (i=0;i<nsimv;i++){
+				energy_fitv += targetv[i]*targetv[i];
+			}
+			energy_fitv /= jlenv;
+		}
+        bool is_write_potential = false;
+        if (count == potential_output_freq){
+			count = 0;
+			if ((energy_fitv*natomsv+energy_fit*natomsr)/natoms < this->energy_fitv_best) {
+				this->energy_fitv_best = (energy_fitv*natomsv+energy_fit*natomsr)/natoms;
+				is_write_potential = true;
+			}
+			else {
+				count--;
+			}
+        }
+		double adexp = 0.1;
+		if (adaptive_regularizer) {regularizer *= sqrt(initial_reg/reg_fit*energy_fit);}
+		if (regularizer<1e-8){
+			doregularizer=false;
+			jlen -=betalen;
+			jlen1 = jlen;
+		}
+		sprintf(line,"Niter: %d, evals: %d, e_err: %.10e, ev_err %.10e, r_err: %.10e x1: %.10e x2: %.10e\n",nIter,counter,energy_fit,energy_fitv,reg_fit,x1,x2);
+		std::cout<<line;
+		fprintf(fid,"%s",line);
+		count++;
+		count1++;
+		count2++;
+		count3++;
+		count4++;
+		count5++;
+		count5spin++;
+		count6++;
+        if (is_write_potential){
+            write_potential_file(true,line,counter,initial_reg);
+        }
+        if (count1==debug_level1_freq){
+			write_debug_level1(tp,targetv);
+			count1=0;
+		}
+		if (count2==debug_level2_freq){
+			write_debug_level2(tp,targetv);
+			count2=0;
+		}
+		if (count3==debug_level3_freq){
+			//always print the ones computed last, regardless of whether the step was good.
+			if (goodstep){
+				write_debug_level3(Jp,tp,bp,dp);
+			}
+			else {
+				write_debug_level3(Jp1,tp1,bp1,dp);
+			}
+			count3=0;
+		}
+		if (count4==debug_level4_freq){
+			write_debug_level4(tp,targetv);
+			count4=0;
+		}
+		if (count5==debug_level5_freq){
+			write_debug_level5(tp,targetv);
+			count5=0;
+		}
+		if (count5==debug_level5_spin_freq){
+			write_debug_level5_spin(tp,targetv);
+			count5spin=0;
+		}
+		if (count6==debug_level6_freq){
+			write_debug_level6(tp,targetv);
+			count6=0;
+		}
+		counter++;
+		//get new gradient direction
+		double *tempdX;
+		tempdX = dXp;
+		dXp = dXp1;
+		dXp1 = tempdX;
+		double numen;
+		double denom;
+		numen = 0.0;
+		denom = 0.0;
+		#pragma omp parallel
+		{
+		#pragma omp for
+		for (j=0;j<betalen;j++){
+			dXp[j]=0.0;
+			for (i=0;i<jlen2;i++){
+				dXp[j]+=2*Jp[i*betalen+j]*tp[i];
+			}
+			if (doregularizer){
+				dXp[j]+=2*Jp[(jlen2+j)*betalen+j]*tp[jlen2+j];
+			}
+		}
+		if (abs(x2)>1e-12){
+			reset = false;
+			#pragma omp for 
+			for (j=0;j<betalen;j++){
+				y[j] = dXp[j]-dXp1[j];
+			}
+			#pragma omp for reduction (+ : denom,numen)
+			for (j=0;j<betalen;j++){
+				denom+=sp[j]*y[j];
+				Hy[j] = 0;
+				for (int k=0;k<betalen;k++){
+					Hy[j]+=Hp[j*betalen+k]*y[k];
+				}
+				numen+=y[j]*Hy[j]+sp[j]*y[j];
+			}
+			#pragma omp for
+			for (j=0;j<betalen;j++){
+				for (int k=0;k<betalen;k++){
+					Hp[j*betalen+k]+=numen/denom/denom*sp[j]*sp[k]-(Hy[j]*sp[k]+sp[j]*Hy[k])/denom;
+				}
+			}
+			#pragma omp for
+			for (j=0;j<betalen;j++){
+				sp[j]=0.0;
+				for (int k=0;k<betalen;k++){
+					sp[j]+=Hp[j*betalen+k]*dXp[k];
+				}
+			}
+		}
+		else {
+			//if (reset == true){errorf(FLERR,"linesearch alpha is zero");}
+			reset = true;
+			for (j=0;j<betalen;j++){
+				for (int k=0;k<betalen;k++){
+					H[j*betalen+k]=0.0;
+				}
+				H[j*betalen+j]=1.0;
+			}
+			//set initial conjugate direction
+			for (j=0;j<betalen;j++){
+				sp[j]=dXp[j];
+				//sp[j]=-sp[j];
+			}
+		}
+		}
+		if (energy_fit<tolerance){
+			std::cout<<"Terminating because reached convergence tolerance\n";
+			write_potential_file(true,line,iter,initial_reg);
+			break;
+		}
+	}
+	//delete dynamic memory use
+	for (int i=0;i<=nelements;i++){
+		if (net1[i].layers>0){
+			for (int j=0;j<net1[i].layers-1;j++){
+				delete [] net1[i].bundleinputsize[j];
+				delete [] net1[i].bundleoutputsize[j];
+				for (int k=0;k<net1[i].bundles[j];k++){
+					delete [] net1[i].bundleinput[j][k];
+					delete [] net1[i].bundleoutput[j][k];
+					delete [] net1[i].bundleW[j][k];
+					delete [] net1[i].bundleB[j][k];
+					delete [] net1[i].freezeW[j][k];
+					delete [] net1[i].freezeB[j][k];
+				}
+				delete [] net1[i].bundleinput[j];
+				delete [] net1[i].bundleoutput[j];
+				delete [] net1[i].bundleW[j];
+				delete [] net1[i].bundleB[j];
+				delete [] net1[i].freezeW[j];
+				delete [] net1[i].freezeB[j];
+			}
+			delete [] net1[i].bundleinput;
+			delete [] net1[i].bundleoutput;
+			delete [] net1[i].bundleW;
+			delete [] net1[i].bundleB;
+			delete [] net1[i].freezeW;
+			delete [] net1[i].freezeB;
+			delete [] net1[i].dimensions;
+			delete [] net1[i].startI;
+		}
+	}
+
+	// clock_t end = clock();
+    // time1 = (double) (end-start1) / CLOCKS_PER_SEC * 1000.0;
+	// sprintf(str,"LM_ch(): %f ms\n",time1);
+	// std::cout<<str;
+    double time = (double) (omp_get_wtime() - start_time_tot)*1000.0;
+    // printf("LM_ch(): %f ms\n",time);
+
+}
+
+void PairRANN::flatten_beta(NNarchitecture *net,double *beta){
+	int itype,i,k1,k2,count2;
+	count2 = 0;
+	for (itype=0;itype<nelementsp;itype++){
+		for (i=0;i<net[itype].layers-1;i++){
+			for (int i1=0;i1<net[itype].bundles[i];i1++){
+				if (net[itype].identitybundle[i][i1])continue;
+				for (k1=0;k1<net[itype].bundleoutputsize[i][i1];k1++){
+					for (k2=0;k2<net[itype].bundleinputsize[i][i1];k2++){
+						if (net[itype].freezeW[i][i1][k1*net[itype].bundleinputsize[i][i1]+k2])continue;
+						beta[count2]=net[itype].bundleW[i][i1][k1*net[itype].bundleinputsize[i][i1]+k2];
+						count2++;
+					}
+					if (net[itype].freezeB[i][i1][k1])continue;
+					beta[count2]=net[itype].bundleB[i][i1][k1];
+					count2++;
+				}
+			}
+		}
+	}
+}
+
+void PairRANN::unflatten_beta(NNarchitecture *net,double *beta){
+	int itype,i,k1,k2,count2;
+	count2 = 0;
+	for (itype=0;itype<nelementsp;itype++){
+		for (i=0;i<net[itype].layers-1;i++){
+			for (int i1=0;i1<net[itype].bundles[i];i1++){
+				if (net[itype].identitybundle[i][i1])continue;
+				for (k1=0;k1<net[itype].bundleoutputsize[i][i1];k1++){
+					for (k2=0;k2<net[itype].bundleinputsize[i][i1];k2++){
+						if (net[itype].freezeW[i][i1][k1*net[itype].bundleinputsize[i][i1]+k2])continue;
+						net[itype].bundleW[i][i1][k1*net[itype].bundleinputsize[i][i1]+k2]=beta[count2];
+						count2++;
+					}
+					if (net[itype].freezeB[i][i1][k1])continue;
+					net[itype].bundleB[i][i1][k1]=beta[count2];
+					count2++;
+				}
+			}
+		}
+	}
+}
+
+
+
+void PairRANN::jacobian_convolution(double *J,double *target,int *s,int sn,int natoms,NNarchitecture *net){
+
+	//clock_t start = clock();
+	double start_time = omp_get_wtime();
+	#pragma omp parallel
+	{
+//	char str[MAXLINE];
+	int nn,ii,n1,j;
+	int count4 = 0;
+	int aoff,soff;
+	int n1dimi, n1sl, n1slM1, n4s, lM1, pIPk2, pLPk2;
+	int sPcPiiX3, p1dlxyz, p2dlxyz, jPstartI, jjXfPk, iiX3, j1X3, p1dXw, p2dXw, p1ddXw, p2ddXw, i2n1W;
+	#pragma omp for schedule(guided)
+	for (n1=0;n1<sn;n1++){
+		nn = s[n1];
+		n4s = sims[nn].inum;
+		double energy;
+		double force[n4s*3];
+		energy = 0.0;
+		soff = sims[nn].speciesoffset;
+		if (targettype==1){
+			for (ii=0;ii<betalen;ii++){
+				J[n1*betalen+ii]=0.0;
+			}
+		}
+		else if (targettype==2){
+			for (j=0;j<sims[nn].uniquespecies;j++){
+				for (ii=0;ii<betalen;ii++){
+					J[(soff+j)*betalen+ii]=0.0;
+				}
+				target[soff+j]=0.0;
+				for (ii=0;ii<n4s;ii++){
+					if (sims[nn].speciesmap[sims[nn].type[ii]]==j){
+						target[soff+j]-= sims[nn].total_ea[ii]/sqrt(sims[nn].speciescount[sims[nn].type[ii]])*sims[nn].energy_weight;
+					}
+				}
+			}
+		}
+		for (ii=0;ii<n4s;ii++){
+			aoff = sims[nn].atomoffset+ii;
+			if (targettype==3){
+				for (j=0;j<betalen;j++){
+					J[aoff*betalen+j]=0.0;
+				}
+				target[aoff] = -sims[nn].total_ea[ii]*sims[nn].energy_weight;
+			}
+			int itype,numneigh,jnum,**firstneigh,*jlist,i,j,k,j1,jj,startI,prevI,l,startL,prevL,k1,k2,k3;
+			startI=0;
+			NNarchitecture net1;
+			itype = sims[nn].type[ii];
+			double t2weight = sims[nn].energy_weight/sqrt(sims[nn].speciescount[itype]);
+			int stype = sims[nn].speciesmap[itype];
+			net1 = net[itype];
+			n1sl = net1.sumlayers;
+			n1slM1 = n1sl-1;
+			iiX3 = ii*3;
+			sPcPiiX3 = sn+count4+iiX3;
+			numneigh = sims[nn].numneigh[ii];
+			jnum = numneigh+1;//extra value on the end of the array is the self term.
+			firstneigh = sims[nn].firstneigh;
+			jlist = firstneigh[ii];
+			int L = net1.layers-1;
+			double layer[n1sl];
+			double dlayer[n1sl];
+			double dlayerx[jnum*n1sl];
+			double dlayery[jnum*n1sl];
+			double dlayerz[jnum*n1sl];
+			int f = net1.dimensions[0];
+			double *features = sims[nn].features[ii];
+			prevI = 0;
+			n1dimi = net1.dimensions[0];
+			for (k=0;k<n1dimi;k++){
+				layer[k]=features[k];
+				dlayer[k] = 1.0;
+			}
+			for (k=net1.dimensions[0];k<n1sl;k++){layer[k]=0;}
+			for (i=0;i<net1.layers-1;i++){
+				for (int i1 = 0;i1<net1.bundles[i];i1++){
+					int s1 = net1.bundleoutputsize[i][i1];
+					int s2 = net1.bundleinputsize[i][i1];
+					for (j=0;j<s1;j++){
+						startI = net1.startI[i+1];
+						int j1 = net1.bundleoutput[i][i1][j];
+						jPstartI = j1+startI;
+						for (k=0;k<s2;k++){
+							int k1 = net1.bundleinput[i][i1][k];
+							layer[jPstartI] += net1.bundleW[i][i1][j*s2+k]*layer[k1+prevI];
+						} 
+						layer[jPstartI] += net1.bundleB[i][i1][j];
+					}
+				}
+				for (j=0;j<net1.dimensions[i+1];j++){
+					startI = net1.startI[i+1];
+					jPstartI = j+startI;
+					dlayer[jPstartI] = activation[itype][i][j]->dactivation_function(layer[jPstartI]);
+					layer[jPstartI] =  activation[itype][i][j]-> activation_function(layer[jPstartI]);
+					if (i==L-1){
+						energy += layer[jPstartI];
+					}
+				}
+				prevI = startI;
+			}
+			prevI=0;
+			int count2=0;//skip frozen parameters
+			int count3=0;//include frozen parameters
+			if (itype>0){
+				count2=betalen_v[itype-1];
+				count3=betalen_f[itype-1];
+			}
+			//backpropagation
+			for (i=0;i<net1.layers-1;i++){
+				int d1 = net1.dimensions[i+1];
+				int d2 = net1.dimensions[i];
+				double dXw[d1*net1.sumlayers];
+				startI = net1.startI[i+1];
+				prevI = net1.startI[i];
+				for (k1=0;k1<net1.sumlayers;k1++){
+					for (k2=0;k2<d1;k2++){
+						dXw[k1*d1+k2]=0.0;
+						if (k1==k2+startI){
+							dXw[k1*d1+k2]=1.0;
+						}
+					}
+				}
+				for (int i1=0;i1<net1.bundles[i];i1++){
+					if (net1.identitybundle[i][i1])continue;
+					int s3 = net1.bundleoutputsize[i][i1];
+					int s4 = net1.bundleinputsize[i][i1];
+					for (l=i+1;l<net1.layers-1;l++){
+						int d3 = net1.dimensions[l+1];
+						int d4 = net1.dimensions[l];
+						int startL = net1.startI[l+1];
+						int prevL = net1.startI[l];
+						for (int l1=0;l1<net1.bundles[l];l1++){
+							int s1 = net1.bundleoutputsize[l][l1];
+							int s2 = net1.bundleinputsize[l][l1];
+							for (k1=0;k1<s1;k1++){
+								for (k2=0;k2<s2;k2++){
+									for (k3=0;k3<s3;k3++){
+										int p1 = net1.bundleoutput[l][l1][k1];
+										int p2 = net1.bundleinput[l][l1][k2];
+										int p3 = net1.bundleoutput[i][i1][k3];
+										//dlayer_l/dlayer_i
+										dXw[(p1+startL)*d1+p3]+=dlayer[p2+prevL]*net1.bundleW[l][l1][k1*s2+k2]*dXw[(p2+prevL)*d1+p3];
+									}
+								}
+							}
+						}
+					}
+					for (k1=0;k1<s3;k1++){
+						int p1 = net1.bundleoutput[i][i1][k1];
+						//weights
+						for (k2=0;k2<s4;k2++){
+							int p2 = net1.bundleinput[i][i1][k2];
+							if (~freezebeta[count3]){
+								if (targettype == 1){
+									J[n1*betalen+count2] += -dXw[(net1.sumlayers-1)*d1+p1]*layer[p2+prevI]*sims[nn].energy_weight;
+								}
+								else if (targettype == 2){
+									J[(soff+stype)*betalen+count2] += -dXw[(net1.sumlayers-1)*d1+p1]*layer[p2+prevI]*t2weight;
+								}
+								else if (targettype == 3){
+									J[aoff*betalen+count2] += -dXw[(net1.sumlayers-1)*d1+p1]*layer[p2+prevI]*sims[nn].energy_weight;
+								}
+								count2++;
+							}
+							count3++;
+						}
+						//bias
+						if (~freezebeta[count3]){
+							if (targettype == 1){
+								J[n1*betalen+count2] += -dXw[(net1.sumlayers-1)*d1+p1]*sims[nn].energy_weight;
+							}
+							else if (targettype == 2){
+								J[(soff+stype)*betalen+count2] += -dXw[(net1.sumlayers-1)*d1+p1]*t2weight;
+							}
+							else if (targettype == 3){
+								J[aoff*betalen+count2] += -dXw[(net1.sumlayers-1)*d1+p1]*sims[nn].energy_weight;
+							}
+							count2++;
+						}
+						count3++;
+					}
+				}
+			}
+			if (targettype == 2){
+				target[soff+stype] += layer[jPstartI]*t2weight;
+			}
+			else if (targettype == 3){
+				target[aoff] += layer[jPstartI]*sims[nn].energy_weight;
+			}
+		}
+		//fill error vector
+		if (targettype == 1){
+			target[n1] = (energy-sims[nn].energy)*sims[nn].energy_weight;
+		}
+	}
+	//regularizer
+	if (doregularizer){
+		int count2 = 0;
+		int count3 = 0;
+		int snoff = sn;
+		if (targettype == 2){
+			snoff = speciesnumberr;
+		}
+		else if (targettype == 3){
+			snoff = natomsr;
+		}
+		// #pragma omp for schedule(dynamic)
+		for (int itype=0;itype<nelementsp;itype++){
+			for (int i=0;i<net[itype].layers-1;i++){
+				for (int i1=0;i1<net[itype].bundles[i];i1++){
+					if (net[itype].identitybundle[i][i1])continue;
+					for (int k1=0;k1<net[itype].bundleoutputsize[i][i1];k1++){
+						for (int k2=0;k2<net[itype].bundleinputsize[i][i1];k2++){
+							if (~freezebeta[count3]){
+								J[(snoff+count2)*betalen+count2] = regularizer;
+								target[snoff+count2] = -regularizer*net[itype].bundleW[i][i1][k1*net[itype].bundleinputsize[i][i1]+k2];
+								count2++;
+							}
+							count3++;
+						}
+						if (~freezebeta[count3]){
+							J[(sn+count2)*betalen+count2] = regularizer;
+							target[sn+count2] = -regularizer*net[itype].bundleB[i][i1][k1];
+							//force last bias to not count toward regularization
+							if (i+2==net[itype].layers){
+								J[(snoff+count2)*betalen+count2]=0;
+								target[(snoff+count2)*betalen+count2]=0;
+							}
+							count2++;
+						}
+						count3++;
+					}
+				}
+			}
+		}
+	}
+
+    }
+
+//	clock_t end = clock();
+//	double time = (double) (end-start) / CLOCKS_PER_SEC * 1000.0;
+	double time = (double) (omp_get_wtime() - start_time)*1000.0;
+	// printf(" - compute_jacobian(): %f ms\n",time);
+
+}
+
+//finds total error from features
+void PairRANN::forward_pass(double *target,int *s,int sn,NNarchitecture *net){
+
+	//clock_t start = clock();
+	double start_time = omp_get_wtime();
+
+	#pragma omp parallel
+	{
+	int nn,ii,n1,j;
+	int countatoms = 0;
+	int jPstartI, jjXfPk, n1sl, n1slM1, p1dlxyz, p2dlxyz, sPcPiiX3, n4s, iiX3, j1X3;
+	int count4 = 0;
+	#pragma omp for schedule(guided)
+	for (n1=0;n1<sn;n1++){
+		nn = s[n1];
+		n4s = sims[nn].inum;
+		double energy;
+		energy = 0.0;
+		int aoff;
+		int soff = sims[nn].speciesoffset;
+		if (targettype==2){
+			for (j=0;j<sims[nn].uniquespecies;j++){
+				for (ii=0;ii<n4s;ii++){
+					if (sims[nn].speciesmap[sims[nn].type[ii]]==j){
+						target[soff+j]-= sims[nn].total_ea[ii]/sqrt(sims[nn].speciescount[sims[nn].type[ii]])*sims[nn].energy_weight;
+					}
+				}
+			}
+		}
+		for (ii=0;ii<n4s;ii++){
+			aoff = sims[nn].atomoffset+ii;
+			if (targettype==3){
+				target[aoff] = -sims[nn].total_ea[ii]*sims[nn].energy_weight;
+			}
+			int itype,numneigh,jnum,**firstneigh,*jlist,i,j,k,j1,jj,startI,prevI;
+			startI=0;
+			NNarchitecture net1;
+			itype = sims[nn].type[ii];
+			double t2weight = sims[nn].energy_weight/sqrt(sims[nn].speciescount[itype]);
+			int stype = sims[nn].speciesmap[itype];
+			net1 = net[itype];
+			n1sl = net1.sumlayers;
+			n1slM1 = n1sl-1;
+			numneigh = sims[nn].numneigh[ii];
+			jnum = numneigh+1;//extra value on the end of the array is the self term.
+			firstneigh = sims[nn].firstneigh;
+			jlist = firstneigh[ii];
+			int L = net1.layers-1;
+			double layer[n1sl];
+			double dlayer[n1sl];
+			double dlayerx[jnum*n1sl];
+			double dlayery[jnum*n1sl];
+			double dlayerz[jnum*n1sl];
+			int f = net1.dimensions[0];
+			double *features = sims[nn].features[ii];
+			double *dfeaturesx;
+			double *dfeaturesy;
+			double *dfeaturesz;
+			if (doforces){
+				dfeaturesx = sims[nn].dfx[ii];
+				dfeaturesy = sims[nn].dfy[ii];
+				dfeaturesz = sims[nn].dfz[ii];
+			}
+			prevI = 0;
+			for (k=0;k<net1.dimensions[0];k++){
+				layer[k]=features[k];
+				dlayer[k] = 1.0;
+			}
+			for (k=net1.dimensions[0];k<n1sl;k++){layer[k]=0;}
+			for (i=0;i<net1.layers-1;i++){
+				for (int i1=0;i1<net1.bundles[i];i1++){
+					int s1 = net1.bundleoutputsize[i][i1];
+					int s2 = net1.bundleinputsize[i][i1];
+					for (j=0;j<s1;j++){
+						startI = net1.startI[i+1];
+						j1 = net1.bundleoutput[i][i1][j];
+						jPstartI = j1+startI;
+						for (k=0;k<s2;k++){
+							int k1 = net1.bundleinput[i][i1][k];
+							layer[jPstartI] += net1.bundleW[i][i1][j*s2+k]*layer[k1+prevI];
+						}
+						layer[jPstartI] += net1.bundleB[i][i1][j];
+					}	
+				}
+				for (j=0;j<net1.dimensions[i+1];j++){
+					startI = net1.startI[i+1];
+					jPstartI = j+startI;
+					dlayer[jPstartI] = activation[itype][i][j]->dactivation_function(layer[jPstartI]);
+					layer[jPstartI] =  activation[itype][i][j]-> activation_function(layer[jPstartI]);
+					if (i==L-1){
+						energy += layer[jPstartI];
+					}
+				}
+				prevI=startI;
+			}
+			prevI=0;
+			if (targettype == 2){
+				target[soff+stype] += layer[jPstartI]*t2weight;
+			}
+			else if (targettype == 3){
+				target[aoff] += layer[jPstartI]*sims[nn].energy_weight;
+			}
+		}
+		//fill error vector
+		if (targettype == 1){
+			target[n1] = (energy-sims[nn].energy)*sims[nn].energy_weight;
+		}
+	}
+	if (doregularizer && sn==nsimr){
+		int count2 = 0;
+		int count3 = 0;
+		int snoff = sn;
+		if (targettype == 2){
+			snoff = speciesnumberr;
+		}
+		else if (targettype == 3){
+			snoff = natomsr;
+		}
+		// #pragma omp for schedule(dynamic)
+		for (int itype=0;itype<nelementsp;itype++){
+			for (int i=0;i<net[itype].layers-1;i++){
+				for (int i1=0;i1<net[itype].bundles[i];i1++){
+					if (net[itype].identitybundle[i][i1])continue;
+					for (int k1=0;k1<net[itype].bundleoutputsize[i][i1];k1++){
+						for (int k2=0;k2<net[itype].bundleinputsize[i][i1];k2++){
+							if (~freezebeta[count3]){
+								//J[(snoff+count2)*betalen+count2] = regularizer;
+								target[snoff+count2] = -regularizer*net[itype].bundleW[i][i1][k1*net[itype].bundleinputsize[i][i1]+k2];
+								count2++;
+							}
+							count3++;
+						}
+						if (~freezebeta[count3]){
+							//J[(sn+count2)*betalen+count2] = regularizer;
+							target[sn+count2] = -regularizer*net[itype].bundleB[i][i1][k1];
+							//force last bias to not count toward regularization
+							if (i+2==net[itype].layers){
+								//J[(snoff+count2)*betalen+count2]=0;
+								target[(snoff+count2)*betalen+count2]=0;
+							}
+							count2++;
+						}
+						count3++;
+					}
+				}
+			}
+		}
+	}
+	}
+	double time = (double) (omp_get_wtime() - start_time)*1000.0;
+}
+
+//finds per atom energies from features
+void PairRANN::get_per_atom_energy(double **energies,int *s,int sn,NNarchitecture *net){
+	double start_time = omp_get_wtime();
+	#pragma omp parallel
+	{
+	int nn,ii,n1;
+	int jPstartI, jjXfPk, n1sl, n1slM1, p1dlxyz, p2dlxyz, sPcPiiX3, n4s, iiX3, j1X3;
+	int count4 = 0;
+	#pragma omp for schedule(guided)
+	for (n1=0;n1<sn;n1++){
+		nn = s[n1];
+		n4s = sims[nn].inum;
+		energies[n1] = new double[n4s];
+		double energy;
+		energy = 0.0;
+		for (ii=0;ii<n4s;ii++){
+			energies[n1][ii]=0;
+			int itype,numneigh,jnum,**firstneigh,*jlist,i,j,k,j1,jj,startI,prevI;
+			startI=0;
+			NNarchitecture net1;
+			itype = sims[nn].type[ii];
+			net1 = net[itype];
+			n1sl = net1.sumlayers;
+			n1slM1 = n1sl-1;
+			numneigh = sims[nn].numneigh[ii];
+			jnum = numneigh+1;//extra value on the end of the array is the self term.
+			firstneigh = sims[nn].firstneigh;
+			jlist = firstneigh[ii];
+			int L = net1.layers-1;
+			double layer[n1sl];
+			int f = net1.dimensions[0];
+			double *features = sims[nn].features[ii];
+			prevI = 0;
+			for (k=0;k<net1.dimensions[0];k++){
+				layer[k]=features[k];
+			}
+			for (k=net1.dimensions[0];k<n1sl;k++){layer[k]=0;}
+			for (i=0;i<net1.layers-1;i++){
+				for (int i1 = 0;i1<net1.bundles[i];i1++){
+					int s1 = net1.bundleoutputsize[i][i1];
+					int s2 = net1.bundleinputsize[i][i1];
+					for (j=0;j<s1;j++){
+						startI = net1.startI[i+1];
+						int j1 = net1.bundleoutput[i][i1][j];
+						jPstartI = j1+startI;
+						for (k=0;k<s2;k++){
+							int k1 = net1.bundleinput[i][i1][k];
+							layer[jPstartI] += net1.bundleW[i][i1][j*s2+k]*layer[k1+prevI];
+						} 
+						layer[jPstartI] += net1.bundleB[i][i1][j];
+					}
+				}
+				for (j=0;j<net1.dimensions[i+1];j++){
+					startI = net1.startI[i+1];
+					jPstartI = j+startI;
+					layer[jPstartI] =  activation[itype][i][j]-> activation_function(layer[jPstartI]);
+					if (i==L-1){
+						energy += layer[jPstartI];
+						energies[n1][ii]=layer[jPstartI];
+					}
+				}
+				prevI = startI;
+			}
+		}
+	}
+	}
+	double time = (double) (omp_get_wtime() - start_time)*1000.0;
+}
+
+//finds total energy and per atom forces from features
+void PairRANN::propagateforward(double *energy,double **force,int ii,int jnum,int itype,double *features, double *dfeaturesx,double *dfeaturesy, double *dfeaturesz,int *jl,int nn, NNarchitecture *net) {
+  int i,j,k,jj,j1,i1;
+  NNarchitecture net1 = net[itype];
+  int L = net1.layers-1;
+  //energy output with forces from analytical derivatives
+  double dsum1[net1.maxlayer];
+  int f = net1.dimensions[0];
+  double sum[net1.maxlayer];
+  double layer[net1.maxlayer];
+  double dlayersumx[jnum][net1.maxlayer];
+  double dlayersumy[jnum][net1.maxlayer];
+  double dlayersumz[jnum][net1.maxlayer];
+  double dlayerx[jnum][net1.maxlayer];
+  double dlayery[jnum][net1.maxlayer];
+  double dlayerz[jnum][net1.maxlayer];
+  for (k=0;k<net1.dimensions[0];k++){
+	  layer[k]=features[k];
+	  for (jj=0;jj<jnum;jj++){
+		  dlayerx[jj][k]=dfeaturesx[jj*f+k];
+		  dlayery[jj][k]=dfeaturesy[jj*f+k];
+		  dlayerz[jj][k]=dfeaturesz[jj*f+k];
+	  }
+  }
+  for (i=0;i<net1.layers-1;i++) {
+	for (j=0;j<net1.dimensions[i+1];j++){
+		sum[j]=0;
+	}
+	for (i1=0;i1<net1.bundles[i];i1++){
+		int s1=net1.bundleoutputsize[i][i1];
+		int s2=net1.bundleinputsize[i][i1];
+		for (j=0;j<s1;j++){
+			int j1 = net1.bundleoutput[i][i1][j];
+			for (k=0;k<s2;k++){
+				int k1 = net1.bundleinput[i][i1][k];
+				sum[j1] += net1.bundleW[i][i1][j*s2+k]*layer[k1];
+			}
+			sum[j1]+= net1.bundleB[i][i1][j];
+		}
+	}
+    for (j=0;j<net1.dimensions[i+1];j++) {
+      dsum1[j] = activation[itype][i][j]->dactivation_function(sum[j]);
+      sum[j] = activation[itype][i][j]->activation_function(sum[j]);
+      if (i==L-1) {
+        energy[j] = sum[j];
+      }
+      //force propagation
+      for (jj=0;jj<jnum;jj++) {
+        dlayersumx[jj][j]=0;
+        dlayersumy[jj][j]=0;
+        dlayersumz[jj][j]=0;
+	  }
+	}
+	for (i1=0;i1<net1.bundles[i];i1++){
+		int s1 = net1.bundleoutputsize[i][i1];
+		int s2 = net1.bundleinputsize[i][i1];
+		for (j=0;j<s1;j++){
+			int j1 = net1.bundleoutput[i][i1][j];
+			for (jj=0;jj<jnum;jj++){
+				for (k=0;k<s2;k++){
+					int k1= net1.bundleinput[i][i1][k];
+					double w1 = net1.bundleW[i][i1][j*s2+k];
+					dlayersumx[jj][j1] += w1*dlayerx[jj][k1];
+					dlayersumy[jj][j1] += w1*dlayery[jj][k1];
+					dlayersumz[jj][j1] += w1*dlayerz[jj][k1];
+				}
+			}
+		}
+	}
+	for (j=0;j<net1.dimensions[i+1];j++){
+		for (jj=0;jj<jnum;jj++){
+			dlayersumx[jj][j]*= dsum1[j];
+			dlayersumy[jj][j]*= dsum1[j];
+			dlayersumz[jj][j]*= dsum1[j];
+		}
+	}
+	if (i==L-1) {
+		for (j=0;j<net1.dimensions[i+1];j++){
+			for (jj=0;jj<jnum-1;jj++){
+				int j2 = jl[jj];
+				force[j2][0]+=dlayersumx[jj][j];
+				force[j2][1]+=dlayersumy[jj][j];
+				force[j2][2]+=dlayersumz[jj][j];
+			}
+			int j2 = sims[nn].ilist[ii];
+			jj = jnum-1;
+			force[j2][0]+=dlayersumx[jj][j];
+			force[j2][1]+=dlayersumy[jj][j];
+			force[j2][2]+=dlayersumz[jj][j];
+		}
+	}
+    //update values for next iteration
+    for (j=0;j<net1.dimensions[i+1];j++) {
+      layer[j]=sum[j];
+      for (jj=0;jj<jnum;jj++) {
+        dlayerx[jj][j] = dlayersumx[jj][j];
+        dlayery[jj][j] = dlayersumy[jj][j];
+        dlayerz[jj][j] = dlayersumz[jj][j];
+      }
+    }
+  }
+}
+
+void PairRANN::propagateforwardspin(double *energy,double **force,double **fm,double **hm,int ii,int jnum,int itype,double *features, double *dfeaturesx,double *dfeaturesy, double *dfeaturesz, double *sx, double *sy, double *sz, double *sxx, double *sxy, double *sxz, double *syy, double *syz, double *szz,int *jl,int nn, NNarchitecture *net) {
+  int i,j,k,jj,j1,i1;
+  NNarchitecture net1 = net[itype];
+  int L = net1.layers-1;
+  //energy output with forces from analytical derivatives
+  double dsum1[net1.maxlayer];
+  double ddsum1[net1.maxlayer];
+  int f = net1.dimensions[0];
+  double sum[net1.maxlayer];
+  double layer[net1.maxlayer];
+  double dlayersumx[jnum][net1.maxlayer];
+  double dlayersumy[jnum][net1.maxlayer];
+  double dlayersumz[jnum][net1.maxlayer];
+  double dlayerx[jnum][net1.maxlayer];
+  double dlayery[jnum][net1.maxlayer];
+  double dlayerz[jnum][net1.maxlayer];
+  double dsx[jnum][net1.maxlayer];
+  double dsy[jnum][net1.maxlayer];
+  double dsz[jnum][net1.maxlayer];
+  double dsxx[jnum][net1.maxlayer];
+  double dsxy[jnum][net1.maxlayer];
+  double dsxz[jnum][net1.maxlayer];
+  double dsyy[jnum][net1.maxlayer];
+  double dsyz[jnum][net1.maxlayer];
+  double dszz[jnum][net1.maxlayer];
+  double dssumx[jnum][net1.maxlayer];
+  double dssumy[jnum][net1.maxlayer];
+  double dssumz[jnum][net1.maxlayer];
+  double dssumxx[jnum][net1.maxlayer];
+  double dssumxy[jnum][net1.maxlayer];
+  double dssumxz[jnum][net1.maxlayer];
+  double dssumyy[jnum][net1.maxlayer];
+  double dssumyz[jnum][net1.maxlayer];
+  double dssumzz[jnum][net1.maxlayer];
+  //energy output with forces from analytical derivatives
+  for (k=0;k<net1.dimensions[0];k++) {
+    layer[k]=features[k];
+    for (jj=0;jj<jnum;jj++) {
+      dlayerx[jj][k]=dfeaturesx[jj*f+k];
+      dlayery[jj][k]=dfeaturesy[jj*f+k];
+      dlayerz[jj][k]=dfeaturesz[jj*f+k];
+      dsx[jj][k]=-sx[jj*f+k];
+      dsy[jj][k]=-sy[jj*f+k];
+      dsz[jj][k]=-sz[jj*f+k];
+      dsxx[jj][k]=-sxx[jj*f+k];
+      dsxy[jj][k]=-sxy[jj*f+k];
+      dsxz[jj][k]=-sxz[jj*f+k];
+      dsyy[jj][k]=-syy[jj*f+k];
+      dsyz[jj][k]=-syz[jj*f+k];
+      dszz[jj][k]=-szz[jj*f+k];
+    }
+  }
+  for (i=0;i<net1.layers-1;i++) {
+    for (j=0;j<net1.dimensions[i+1];j++) {
+      sum[j]=0;
+    }
+    for (i1=0;i1<net1.bundles[i];i1++){
+      int s1=net1.bundleoutputsize[i][i1];
+      int s2=net1.bundleinputsize[i][i1];
+      for (j=0;j<s1;j++){
+        int j1 = net1.bundleoutput[i][i1][j];
+        for (k=0;k<s2;k++){
+          int k1 = net1.bundleinput[i][i1][k];
+          sum[j1] += net1.bundleW[i][i1][j*s2+k]*layer[k1];
+        }
+        sum[j1]+= net1.bundleB[i][i1][j];
+       }
+    }
+    for (j=0;j<net1.dimensions[i+1];j++) {
+      ddsum1[j] = activation[itype][i][j]->ddactivation_function(sum[j]);
+      dsum1[j] = activation[itype][i][j]->dactivation_function(sum[j]);
+      sum[j] = activation[itype][i][j]->activation_function(sum[j]);
+      if (i==L-1) {
+        energy[j] = sum[j];
+      }
+      //force propagation
+      for (jj=0;jj<jnum;jj++) {
+        dlayersumx[jj][j]=0;
+        dlayersumy[jj][j]=0;
+        dlayersumz[jj][j]=0;
+        dssumx[jj][j]=0;
+        dssumy[jj][j]=0;
+        dssumz[jj][j]=0;
+        dssumxx[jj][j]=0;
+        dssumxy[jj][j]=0;
+        dssumxz[jj][j]=0;
+        dssumyy[jj][j]=0;
+        dssumyz[jj][j]=0;
+        dssumzz[jj][j]=0;
+      }
+    }
+    for (i1=0;i1<net1.bundles[i];i1++){
+      int s1 = net1.bundleoutputsize[i][i1];
+      int s2 = net1.bundleinputsize[i][i1];
+      for (j=0;j<s1;j++){
+        int j1 = net1.bundleoutput[i][i1][j];
+        for (jj=0;jj<jnum;jj++){
+          for (k=0;k<s2;k++){
+            int k1= net1.bundleinput[i][i1][k];
+            double w1 = net1.bundleW[i][i1][j*s2+k];
+            dlayersumx[jj][j1] += w1*dlayerx[jj][k1];
+            dlayersumy[jj][j1] += w1*dlayery[jj][k1];
+            dlayersumz[jj][j1] += w1*dlayerz[jj][k1];
+            dssumx[jj][j1] += w1*dsx[jj][k1];
+            dssumy[jj][j1] += w1*dsy[jj][k1];
+            dssumz[jj][j1] += w1*dsz[jj][k1];
+            dssumxx[jj][j1] += w1*dsxx[jj][k1];
+            dssumxy[jj][j1] += w1*dsxy[jj][k1];
+            dssumxz[jj][j1] += w1*dsxz[jj][k1];
+            dssumyy[jj][j1] += w1*dsyy[jj][k1];
+            dssumyz[jj][j1] += w1*dsyz[jj][k1];
+            dssumzz[jj][j1] += w1*dszz[jj][k1];
+          }
+        }
+      }
+    }
+    for (j=0;j<net1.dimensions[i+1];j++){
+      for (jj=0;jj<jnum;jj++){
+        dlayersumx[jj][j]*= dsum1[j];
+        dlayersumy[jj][j]*= dsum1[j];
+        dlayersumz[jj][j]*= dsum1[j];
+        dssumxx[jj][j] = dssumxx[jj][j]*dsum1[j]+dssumx[jj][j]*dssumx[jj][j]*ddsum1[j];
+        dssumxy[jj][j] = dssumxy[jj][j]*dsum1[j]+dssumx[jj][j]*dssumy[jj][j]*ddsum1[j];
+        dssumxz[jj][j] = dssumxz[jj][j]*dsum1[j]+dssumx[jj][j]*dssumz[jj][j]*ddsum1[j];
+        dssumyy[jj][j] = dssumyy[jj][j]*dsum1[j]+dssumy[jj][j]*dssumy[jj][j]*ddsum1[j];
+        dssumyz[jj][j] = dssumyz[jj][j]*dsum1[j]+dssumy[jj][j]*dssumz[jj][j]*ddsum1[j];
+        dssumzz[jj][j] = dssumzz[jj][j]*dsum1[j]+dssumz[jj][j]*dssumz[jj][j]*ddsum1[j];
+        dssumx[jj][j] *= dsum1[j];
+        dssumy[jj][j] *= dsum1[j];
+        dssumz[jj][j] *= dsum1[j];
+      }
+    }
+    if (i==L-1) {
+      for (j=0;j<net1.dimensions[i+1];j++){
+        for (jj=0;jj<jnum-1;jj++){
+          int j2 = jl[jj];
+          force[j2][0]+=dlayersumx[jj][j];
+          force[j2][1]+=dlayersumy[jj][j];
+          force[j2][2]+=dlayersumz[jj][j];
+          fm[j2][0]+=dssumx[jj][j]/hbar;
+          fm[j2][1]+=dssumy[jj][j]/hbar;
+          fm[j2][2]+=dssumz[jj][j]/hbar;
+          hm[j2][0]+=dssumxx[jj][j]/hbar;
+          hm[j2][1]+=dssumxy[jj][j]/hbar;
+          hm[j2][2]+=dssumxz[jj][j]/hbar;
+          hm[j2][3]+=dssumyy[jj][j]/hbar;
+          hm[j2][4]+=dssumyz[jj][j]/hbar;
+          hm[j2][5]+=dssumzz[jj][j]/hbar;
+        }
+        int j2 = sims->ilist[ii];
+        jj = jnum-1;
+        force[j2][0]+=dlayersumx[jj][j];
+        force[j2][1]+=dlayersumy[jj][j];
+        force[j2][2]+=dlayersumz[jj][j];
+        fm[j2][0]+=dssumx[jj][j]/hbar;
+        fm[j2][1]+=dssumy[jj][j]/hbar;
+        fm[j2][2]+=dssumz[jj][j]/hbar;
+        hm[j2][0]+=dssumxx[jj][j]/hbar;
+        hm[j2][1]+=dssumxy[jj][j]/hbar;
+        hm[j2][2]+=dssumxz[jj][j]/hbar;
+        hm[j2][3]+=dssumyy[jj][j]/hbar;
+        hm[j2][4]+=dssumyz[jj][j]/hbar;
+        hm[j2][5]+=dssumzz[jj][j]/hbar;
+      }
+    }
+    //update values for next iteration
+    for (j=0;j<net1.dimensions[i+1];j++) {
+      layer[j]=sum[j];
+      for (jj=0;jj<jnum;jj++) {
+        dlayerx[jj][j] = dlayersumx[jj][j];
+        dlayery[jj][j] = dlayersumy[jj][j];
+        dlayerz[jj][j] = dlayersumz[jj][j];
+        dsx[jj][j] = dssumx[jj][j];
+        dsy[jj][j] = dssumy[jj][j];
+        dsz[jj][j] = dssumz[jj][j];
+        dsxx[jj][j] = dssumxx[jj][j];
+        dsxy[jj][j] = dssumxy[jj][j];
+        dsxz[jj][j] = dssumxz[jj][j];
+        dsyy[jj][j] = dssumyy[jj][j];
+        dsyz[jj][j] = dssumyz[jj][j];
+        dszz[jj][j] = dssumzz[jj][j];
+      }
+    }
+  }
+}
 
 void PairRANN::cull_neighbor_list(double *xn,double *yn, double *zn,int *tn, int* jnum,int *jl,int i,int sn,double cutmax){
 	int *jlist,j,count,jj,*type,jtype;
@@ -1496,6 +4541,333 @@ void PairRANN::chsolve(double *A,int n,double *b, double *x){
 	return;
 }
 
+//writes files used for restarting and final output:
+void PairRANN::write_potential_file(bool writeparameters, char *header,int iter, double reg){
+	int i,j,k,l;
+	char filename[strlen(potential_output_file)+10];
+	if (overwritepotentials){
+		sprintf(filename,"%s",potential_output_file);
+	}
+	else {
+		sprintf(filename,"%s.%d",potential_output_file,iter);
+	}
+	FILE *fid = fopen(filename,"w");
+	if (fid==NULL){
+		printf("%s",filename);
+		errorf("Invalid parameter file name");
+	}
+	NNarchitecture *net_out = new NNarchitecture[nelementsp];
+	if (normalizeinput){
+		unnormalize_net(net_out);
+	}
+	else {
+		copy_network(net,net_out);
+	}
+	fprintf(fid,"#");
+	fprintf(fid,header);
+	//atomtypes section
+	fprintf(fid,"atomtypes:\n");
+	for (i=0;i<nelements;i++){
+		fprintf(fid,"%s ",elements[i]);
+	}
+	fprintf(fid,"\n");
+	//mass section
+	for (i=0;i<nelements;i++){
+		fprintf(fid,"mass:%s:\n",elements[i]);
+		fprintf(fid,"%f\n",mass[i]);
+	}
+	//fingerprints per element section
+	for (i=0;i<nelementsp;i++){
+		if (fingerprintperelement[i]>0){
+			fprintf(fid,"fingerprintsperelement:%s:\n",elementsp[i]);
+			fprintf(fid,"%d\n",fingerprintperelement[i]);
+		}
+	}
+	//fingerprints section:
+	for (i=0;i<nelementsp;i++){
+		bool printheader = true;
+		for (j=0;j<fingerprintperelement[i];j++){
+			if (printheader){
+				fprintf(fid,"fingerprints:");
+				fprintf(fid,"%s",elementsp[fingerprints[i][j]->atomtypes[0]]);
+				for (k=1;k<fingerprints[i][j]->n_body_type;k++){
+					fprintf(fid,"_%s",elementsp[fingerprints[i][j]->atomtypes[k]]);
+				}
+				fprintf(fid,":\n");
+			}
+			else {fprintf(fid,"\t");}
+			fprintf(fid,"%s_%d",fingerprints[i][j]->style,fingerprints[i][j]->id);
+			printheader = true;
+			if (j<fingerprintperelement[i]-1 && fingerprints[i][j]->n_body_type == fingerprints[i][j+1]->n_body_type){
+				printheader = false;
+				for (k=1;k<fingerprints[i][j]->n_body_type;k++){
+					if (fingerprints[i][j]->atomtypes[k]!=fingerprints[i][j+1]->atomtypes[k]){
+						printheader = true;
+						fprintf(fid,"\n");
+						break;
+					}
+				}
+			}
+			else fprintf(fid,"\n");
+		}
+	}
+	//fingerprint contants section:
+	for (i=0;i<nelementsp;i++){
+		for (j=0;j<fingerprintperelement[i];j++){
+			fingerprints[i][j]->write_values(fid);
+		}
+	}
+	//screening section
+	for (i=0;i<nelements;i++){
+		for (j=0;j<nelements;j++){
+			for (k=0;k<nelements;k++){
+				fprintf(fid,"screening:%s_%s_%s:Cmax:\n",elements[i],elements[j],elements[k]);
+				fprintf(fid,"%f\n",screening_max[i*nelements*nelements+j*nelements+k]);
+				fprintf(fid,"screening:%s_%s_%s:Cmin:\n",elements[i],elements[j],elements[k]);
+				fprintf(fid,"%f\n",screening_min[i*nelements*nelements+j*nelements+k]);
+			}
+		}
+	}
+	//network layers section:
+	for (i=0;i<nelementsp;i++){
+		if (net_out[i].layers>0){
+			fprintf(fid,"networklayers:%s:\n",elementsp[i]);
+			fprintf(fid,"%d\n",net_out[i].layers);
+		}
+	}
+	//layer size section:
+	for (i=0;i<nelementsp;i++){
+		for (j=0;j<net_out[i].layers;j++){
+			fprintf(fid,"layersize:%s:%d:\n",elementsp[i],j);
+			fprintf(fid,"%d\n",net_out[i].dimensions[j]);
+		}
+	}
+	//bundles section:
+	for (i=0;i<nelementsp;i++){
+		for (j=0;j<net_out[i].layers-1;j++){
+			fprintf(fid,"bundles:%s:%d:\n",elements[i],j);
+			fprintf(fid,"%d\n",net_out[i].bundles[j]);
+		}
+	}
+	//bundle id section
+	for (i=0;i<nelementsp;i++){
+		for (j=0;j<net_out[i].layers-1;j++){
+			for (int i1=0;i1<net_out[i].bundles[j];i1++){
+				if (net_out[i].identitybundle[j][i1]){
+					fprintf(fid,"bundleid:%s:%d:%d:\n",elements[i],j,i1);
+					fprintf(fid,"1\n");
+				}
+			}
+		}
+	}
+	//bundle input section:
+	for (i=0;i<nelementsp;i++){
+		for (j=0;j<net_out[i].layers-1;j++){
+			for (int i1=0;i1<net_out[i].bundles[j];i1++){
+				fprintf(fid,"bundleinput:%s:%d:%d:\n",elements[i],j,i1);
+				for (k=0;k<net_out[i].bundleinputsize[j][i1];k++){
+					fprintf(fid,"%d ",net_out[i].bundleinput[j][i1][k]);
+				}
+				fprintf(fid,"\n");
+			}
+		}
+	}
+	//bundle output section:
+	for (i=0;i<nelementsp;i++){
+		for (j=0;j<net_out[i].layers-1;j++){
+			for (int i1=0;i1<net_out[i].bundles[j];i1++){
+				fprintf(fid,"bundleoutput:%s:%d:%d:\n",elements[i],j,i1);
+				for (k=0;k<net_out[i].bundleoutputsize[j][i1];k++){
+					fprintf(fid,"%d ",net_out[i].bundleoutput[j][i1][k]);
+				}
+				fprintf(fid,"\n");
+			}
+		}
+	}
+	//weight section:
+	for (i=0;i<nelementsp;i++){
+		for (j=0;j<net_out[i].layers-1;j++){
+			for (int i1=0;i1<net_out[i].bundles[j];i1++){
+				if (net_out[i].identitybundle[j][i1])continue;
+				fprintf(fid,"weight:%s:%d:%d:\n",elementsp[i],j,i1);
+				for (k=0;k<net_out[i].bundleoutputsize[j][i1];k++){
+					for (l=0;l<net_out[i].bundleinputsize[j][i1];l++){
+						fprintf(fid,"%.15e\t",net_out[i].bundleW[j][i1][k*net_out[i].bundleinputsize[j][i1]+l]);
+					}
+					fprintf(fid,"\n");
+				}
+			}
+		}
+	}
+	//bias section:
+	for (i=0;i<nelementsp;i++){
+		for (j=0;j<net_out[i].layers-1;j++){
+			for (int i1=0;i1<net_out[i].bundles[j];i1++){
+				if (net_out[i].identitybundle[j][i1])continue;
+				fprintf(fid,"bias:%s:%d:%d:\n",elementsp[i],j,i1);
+				for (k=0;k<net_out[i].bundleoutputsize[j][i1];k++){
+					fprintf(fid,"%.15e\n",net_out[i].bundleB[j][i1][k]);
+				}
+			}
+		}
+	}
+	//activation section:
+	for (i=0;i<nelementsp;i++){
+		for (j=0;j<net_out[i].layers-1;j++){
+			bool allsame = true;
+			for (k=1;k<net_out[i].dimensions[j+1];k++){
+				if (strcmp(activation[i][j][k]->style,activation[i][j][0]->style)!=0){
+					allsame = false;
+					break;
+				}
+			}
+			if (!allsame){
+				for (k=0;k<net_out[i].dimensions[j+1];k++){
+					fprintf(fid,"activationfunctions:%s:%d:%d:\n",elementsp[i],j,k);
+					fprintf(fid,"%s\n",activation[i][j][k]->style);
+				}
+			}
+			else {
+				fprintf(fid,"activationfunctions:%s:%d:\n",elementsp[i],j);
+				fprintf(fid,"%s\n",activation[i][j][0]->style);
+			}
+		}
+	}
+	//state equation per element section
+	for (i=0;i<nelementsp;i++){
+		if (stateequationperelement[i]>0){
+			fprintf(fid,"stateequationsperelement:%s:\n",elementsp[i]);
+			fprintf(fid,"%d\n",stateequationperelement[i]);
+		}
+	}
+	//state equations section:
+	for (i=0;i<nelementsp;i++){
+		bool printheader = true;
+		for (j=0;j<stateequationperelement[i];j++){
+			if (printheader){
+				fprintf(fid,"stateequations:");
+				fprintf(fid,"%s",elementsp[state[i][j]->atomtypes[0]]);
+				for (k=1;k<state[i][j]->n_body_type;k++){
+					fprintf(fid,"_%s",elementsp[state[i][j]->atomtypes[k]]);
+				}
+				fprintf(fid,":\n");
+			}
+			else {fprintf(fid,"\t");}
+			fprintf(fid,"%s_%d",state[i][j]->style,state[i][j]->id);
+			printheader = true;
+			if (j<stateequationperelement[i]-1 && state[i][j]->n_body_type == state[i][j+1]->n_body_type){
+				printheader = false;
+				for (k=1;k<state[i][j]->n_body_type;k++){
+					if (state[i][j]->atomtypes[k]!=state[i][j+1]->atomtypes[k]){
+						printheader = true;
+						fprintf(fid,"\n");
+						break;
+					}
+				}
+			}
+			else fprintf(fid,"\n");
+		}
+	}
+	//state equations contants section:
+	for (i=0;i<nelementsp;i++){
+		for (j=0;j<stateequationperelement[i];j++){
+			state[i][j]->write_values(fid);
+		}
+	}
+	//calibration parameters section
+	if (writeparameters){
+		fprintf(fid,"calibrationparameters:algorithm:\n");
+		fprintf(fid,"%s\n",algorithm);
+		fprintf(fid,"calibrationparameters:dumpdirectory:\n");
+		fprintf(fid,"%s\n",dump_directory);
+		fprintf(fid,"calibrationparameters:doforces:\n");
+		fprintf(fid,"%d\n",doforces);
+		fprintf(fid,"calibrationparameters:normalizeinput:\n");
+		fprintf(fid,"%d\n",normalizeinput);
+		fprintf(fid,"calibrationparameters:tolerance:\n");
+		fprintf(fid,"%.10e\n",tolerance);
+		fprintf(fid,"calibrationparameters:regularizer:\n");
+		fprintf(fid,"%.10e\n",reg);
+		fprintf(fid,"calibrationparameters:logfile:\n");
+		fprintf(fid,"%s\n",log_file);
+		fprintf(fid,"calibrationparameters:potentialoutputfile:\n");
+		fprintf(fid,"%s\n",potential_output_file);
+		fprintf(fid,"calibrationparameters:potentialoutputfreq:\n");
+		fprintf(fid,"%d\n",potential_output_freq);
+		fprintf(fid,"calibrationparameters:maxepochs:\n");
+		fprintf(fid,"%d\n",max_epochs);
+		for (i=0;i<nelements;i++){
+			for (j=0;j<net_out[i].layers-1;j++){
+				for (int k=0;k<net_out[i].bundles[j];k++){
+					if (net_out[i].identitybundle[j][k])continue;
+					bool anyfrozen = false;
+					for (int l=0;l<net_out[i].bundleoutputsize[j][k]*net_out[i].bundleinputsize[j][k];l++){
+						if (net_out[i].freezeW[j][k][l]){
+							anyfrozen = true;
+							break;
+						}
+					}
+					if (anyfrozen){
+						fprintf(fid,"calibrationparameters:freezeW:%d:%d\n",j,k);
+						for (int l=0;l<net_out[i].bundleoutputsize[j][k];l++){
+							for (int m=0;m<net_out[i].bundleinputsize[j][k];m++){
+								fprintf(fid,"%d ",net_out[i].freezeW[j][k][l*net_out[i].bundleoutputsize[j][k]+m]);
+							}
+							fprintf(fid,"\n");
+						}
+					}
+					anyfrozen = false;
+					for (int l=0;l<net_out[i].bundleoutputsize[j][k];l++){
+						if (net_out[i].freezeB[j][k][l]){
+							anyfrozen = true;
+							break;
+						}
+					}
+					if (anyfrozen){
+						fprintf(fid,"calibrationparameters:freezeB:%d:%d\n",j,k);
+						for (int l=0;l<net_out[i].bundleoutputsize[j][k];l++){
+							fprintf(fid,"%d\n",net_out[i].freezeB[j][k][l]);
+						}
+					}
+				}
+			}
+		}
+		fprintf(fid,"calibrationparameters:validation:\n");
+		fprintf(fid,"%f\n",validation);
+		fprintf(fid,"calibrationparameters:overwritepotentials:\n");
+		fprintf(fid,"%d\n",overwritepotentials);
+		fprintf(fid,"calibrationparameters:debug1freq:\n");
+		fprintf(fid,"%d\n",debug_level1_freq);
+		fprintf(fid,"calibrationparameters:debug2freq:\n");
+		fprintf(fid,"%d\n",debug_level2_freq);
+		fprintf(fid,"calibrationparameters:debug3freq:\n");
+		fprintf(fid,"%d\n",debug_level3_freq);
+		fprintf(fid,"calibrationparameters:debug4freq:\n");
+		fprintf(fid,"%d\n",debug_level4_freq);
+		fprintf(fid,"calibrationparameters:debug5freq:\n");
+		fprintf(fid,"%d\n",debug_level5_freq);
+		fprintf(fid,"calibrationparameters:debug5spinfreq:\n");
+		fprintf(fid,"%d\n",debug_level5_spin_freq);
+		fprintf(fid,"calibrationparameters:debug6freq:\n");
+		fprintf(fid,"%d\n",debug_level6_freq);
+		fprintf(fid,"calibrationparameters:adaptiveregularizer:\n");
+		fprintf(fid,"%d\n",adaptive_regularizer);
+		fprintf(fid,"calibrationparameters:lambdainitial:\n");
+		fprintf(fid,"%f\n",lambda_initial);
+		fprintf(fid,"calibrationparameters:lambdaincrease:\n");
+		fprintf(fid,"%f\n",lambda_increase);
+		fprintf(fid,"calibrationparameters:lambdareduce:\n");
+		fprintf(fid,"%f\n",lambda_reduce);
+		fprintf(fid,"calibrationparameters:inumweight:\n");
+		fprintf(fid,"%f\n",inum_weight);
+		fprintf(fid,"calibrationparameters:seed:\n");
+		fprintf(fid,"%d\n",seed);
+		fprintf(fid,"calibrationparameters:targettype:\n");
+		fprintf(fid,"%d\n",targettype);
+	}
+	fclose(fid);
+	delete [] net_out;
+}
 
 void PairRANN::screen(double *Sik, double *dSikx, double*dSiky, double *dSikz, double *dSijkx, double *dSijky, double *dSijkz, bool *Bij, int ii,int sid,double *xn,double *yn,double *zn,int *tn,int jnum)
 {
@@ -1617,13 +4989,13 @@ int PairRANN::count_words(char *line,char *delimiter){
 
 void PairRANN::errorf(const std::string &file, int line,const char *message){
 	//see about adding message to log file
-	printf("Error: file: %s, line: %d\n%s\n",file,line,message);
+	printf("Error: file: INSERT, line: %d\n%s\n",line,message);
 	exit(1);
 }
 
 void PairRANN::errorf(char *file, int line,const char *message){
 	//see about adding message to log file
-	printf("Error: file: %s, line: %d\n%s\n",file,line,message);
+	printf("Error: file: INSERT, line: %d\n%s\n",line,message);
 	exit(1);
 }
 

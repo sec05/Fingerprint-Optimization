@@ -163,3 +163,8 @@ cython_debug/
 
 *.png
 calibration
+fingerprint_optimizer
+obj
+.vscode
+*.nn.*
+*.d
