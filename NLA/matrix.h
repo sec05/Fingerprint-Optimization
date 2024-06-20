@@ -1,4 +1,6 @@
-#include <vector.h>
+#ifndef MATRIX_H
+#define MATRIX_H
+#include "vector.h"
 
 namespace NLA{
     class Matrix{
@@ -24,3 +26,4 @@ namespace NLA{
 
     };
 }
+#endif

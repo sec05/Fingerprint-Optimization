@@ -2,7 +2,8 @@
 #include "vector.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <bits/stdc++.h>
+#include <bitset>
+
 using namespace NLA;
 
 Matrix::Matrix(int m, int n) {
@@ -92,12 +93,12 @@ double Matrix::frobeniusNorm() {
 // https://www.geeksforgeeks.org/inplace-m-x-n-size-matrix-transpose/
 void Matrix::transpose() {
   int size = rows*columns - 1; 
-    int t; // holds element to be replaced,  
+    double* t; // holds element to be replaced,  
            // eventually becomes next element to move 
     int next; // location of 't' to be moved 
     int cycleBegin; // holds start of cycle 
     int i; // iterator 
-    bitset<HASH_SIZE> b; // hash to mark moved elements 
+    std::bitset<128> b; // hash to mark moved elements 
   
     b.reset(); 
     b[0] = b[size] = 1; 
@@ -112,7 +113,10 @@ void Matrix::transpose() {
             // Output matrix  
             // i_new = (i*r)%(N-1) 
             next = (i*rows)%size; 
-            swap(data[next], t); 
+            double* temp = t;
+            t = data[next];
+            data[next] = temp;
+            delete temp;
             b[i] = 1; 
             i = next; 
         } 
@@ -128,7 +132,7 @@ bool Matrix::equals(Matrix* m) {
         printf("Error: Cannot evalulate equality of matricies! Dimensions do not match!\n");
         return false;
     }
-    for(int i = 0; i < row; i++){
+    for(int i = 0; i < rows; i++){
         for(int j = 0; j < columns; j++){
             if(data[i][j] != m->data[i][j]) return false;
         }
@@ -141,7 +145,7 @@ NLA::Vector* Matrix::getRow(int m) {
         printf("Error: Row requested is larger than matrix size!");
         return NULL;
     }
-    double* row = malloc(sizeof(double)*columns);
+    double* row = (double *) malloc(sizeof(double)*columns);
     for(int i = 0; i < columns; i++){
         row[i] = data[m][i];
     }
@@ -155,7 +159,7 @@ NLA::Vector* Matrix::getColumn(int n) {
         printf("Error: Column requested is larger than matrix size!");
         return NULL;
     }
-    double* column = malloc(sizeof(double)*rows);
+    double* column = (double *) malloc(sizeof(double)*rows);
     for(int i = 0; i < rows; i++){
         column[i] = data[i][n];
     }

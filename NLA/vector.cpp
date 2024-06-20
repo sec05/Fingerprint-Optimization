@@ -52,7 +52,7 @@ void Vector::subtract(Vector* v) {
 double Vector::dot(Vector* v) {
     if(dimension != v->dimension){
         printf("Error: Unable to dot vectors! Dimensions incompatible!");
-        return;
+        return NULL;
     }
     double sum = 0;
     for(int i = 0; i < dimension; i++){

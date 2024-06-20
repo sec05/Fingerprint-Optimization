@@ -1,3 +1,5 @@
+#ifndef VECTOR_H
+#define VECTOR_H
 namespace NLA
 {
 
@@ -18,3 +20,4 @@ namespace NLA
         void makeUnitVector();
     };
 }
+#endif
