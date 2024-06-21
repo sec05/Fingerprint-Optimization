@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <bitset>
+#include <fstream>
 
 using namespace NLA;
 
@@ -15,6 +16,22 @@ Matrix::Matrix(int m, int n) {
         for(int j = 0; j < n; j++){
             data[i][j] = 0;
         }
+    }
+}
+
+Matrix::Matrix(int m, int n, std::string s) {
+    
+    rows = m;
+    columns = n;
+    if(s == "identity"){
+    data = (double **) malloc(m*sizeof(double *));
+    for(int i = 0; i < m; i++){
+        data[i] = (double *) malloc(n*sizeof(double));
+        for(int j = 0; j < n; j++){
+            if(i==j) data[i][j] = 1;
+            else data[i][j] = 0;
+        }
+    }
     }
 }
 
@@ -141,7 +158,7 @@ bool Matrix::equals(Matrix* m) {
 }
 
 NLA::Vector* Matrix::getRow(int m) {
-    if(rows >= m){
+    if(rows <= m){
         printf("Error: Row requested is larger than matrix size!");
         return NULL;
     }
@@ -155,7 +172,7 @@ NLA::Vector* Matrix::getRow(int m) {
 }
 
 NLA::Vector* Matrix::getColumn(int n) {
-    if(columns >= n){
+    if(columns <= n){
         printf("Error: Column requested is larger than matrix size!");
         return NULL;
     }
@@ -166,4 +183,31 @@ NLA::Vector* Matrix::getColumn(int n) {
     NLA::Vector* v = new NLA::Vector(column,rows);
     delete [] column;
     return v;
+}
+
+bool Matrix::outputToFile(std::string file){
+    std::ofstream matrixFile;
+    int r = 0;
+    matrixFile.open(file);
+    printf("%d %d\n",rows,columns);
+    for(int i = 0; i < rows; i++){
+        for(int j = 0; j < columns; j++){
+            matrixFile<<data[i][j];
+            std::string s = j == columns-1 ? "" : " ";
+            matrixFile << s;
+        }
+        matrixFile<<std::endl;
+    }
+    matrixFile.close();
+    return true;
+}
+
+Matrix* Matrix::copyMatrix(){
+    Matrix* A = new Matrix(rows,columns);
+    for(int i = 0; i < rows; i++){
+        for(int j = 0; j < columns; j++){
+            A->data[i][j] = data[i][j];
+        }
+    }
+    return A;
 }

@@ -46,24 +46,18 @@ NLA::Matrix* Generator::generate_fingerprint_matrix(){
     }
     // write matrix to file
     // create matrix ******* CHECK SIZE FOR BIGGER INPUTS
-    std::ofstream matrixFile;
     NLA::Matrix* m = new NLA::Matrix(rows,columns);
     int r = 0;
-    matrixFile.open("./Optimizer Output/"+inputFile+".matrix");
     for(int n = 0; n < calibrator->nsims; n++){
         LAMMPS_NS::PairRANN::Simulation& sim = calibrator->sims[n];
         for(int i = 0; i < sim.inum; i++){
             for(int j = 0; j < columns; j++){
-                matrixFile << sim.features[i][j];
-                std::string delimerator = j == columns - 1 ? "" : ", ";
-                matrixFile << delimerator;
                 m->data[r][j] = sim.features[i][j];
             }
             r++;
-            matrixFile << std::endl;
         }
     }
-    matrixFile.close();
+    m->outputToFile("./Optimizer Output/optimizer.matrix");
     printf("Generator: created fingerprint matrix!\n");
     return m;
 }

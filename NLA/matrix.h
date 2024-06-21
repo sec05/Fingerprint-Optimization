@@ -1,15 +1,20 @@
 #ifndef MATRIX_H
 #define MATRIX_H
 #include "vector.h"
+#include <string>
 
 namespace NLA{
     class Matrix{
         public:
         Matrix(int,int);
+        Matrix(int,int,std::string);
         ~Matrix();
 
         int rows, columns;
         double** data;
+        
+        // matrix algorithms
+
 
         // arithemtic operations
         void scale(double);
@@ -24,6 +29,13 @@ namespace NLA{
         NLA::Vector* getRow(int);
         NLA::Vector* getColumn(int);
 
+        //utility algorithms
+        bool outputToFile(std::string);
+        Matrix* copyMatrix();
+
+        // math algorithms
+        Matrix **classicalGramSchmidt();
+        Matrix **modifiedGramSchmidt();
     };
 }
 #endif

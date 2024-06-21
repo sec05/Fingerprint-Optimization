@@ -7,11 +7,10 @@
 
 #include <stdio.h>
 #include "optimizer.h"
-
+#include "NLA/matrix.h"
 //read command line input.
 int main(int argc, char **argv)
 {
-	printf("Started running!\n");
 	OPT::Optimizer* optimizer = new OPT::Optimizer("_Ti.nn");
 	return 0;
 }
