@@ -1,6 +1,5 @@
 #include "omp.h"
 #include "pair_spin_rann.h"
-#include "rann_activation.h"
 #include "rann_fingerprint.h"
 #include "rann_stateequation.h"
 

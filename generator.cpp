@@ -18,8 +18,14 @@ Generator::~Generator(){
 }
 
 NLA::Matrix* Generator::generate_fingerprint_matrix(){
+    numRadialFingerprints = 2;
+    numBondFingerprints = 10;
+    radialFingerprintsLowerBound = 0;
+    radialFingerprintsUpperBound = 1;
+    bondFingerprintsLowerBound = 0;
+    bondFingerprintsUpperBound = 1;
     // create input file
-    generate_opt_inputs(2,0,1,2,0,1);
+    generate_opt_inputs();
     std::cout << "generated input!"<<std::endl;
     // then pass it through set FOR NOW
     inputFile += ".opt";
@@ -57,29 +63,30 @@ NLA::Matrix* Generator::generate_fingerprint_matrix(){
         }
     }
     matrixFile.close();
+    printf("Generator: created fingerprint matrix!\n");
     return m;
 }
 
-void Generator::generate_opt_inputs(int numRadialFingerprints, double radialFingerprintsLowerBound, double radialFingerprintsUpperBound, int numBondFingerprints, double bondFingerprintsLowerBound, double bondFingerprintsUpperBound)
+void Generator::generate_opt_inputs()
 {
     // want to read every line from input file into
     std::map<int, std::pair<std::string, std::string> > *inputTable = readFile();
     if (inputTable == NULL)
     {
-        printf("Optimization error: could not generate new inout file");
+        printf("Generator error: could not generate new inout file");
     }
 
     // read atom types
     int atomTypesIndex = utils::searchTable("atomtypes:", inputTable);
     if (atomTypesIndex == -1)
     {
-        printf("Optimization error: atom types not found in input file!\n");
+        printf("Generator error: atom types not found in input file!\n");
         return;
     }
     std::vector<std::string> atomTypes = utils::splitString((*inputTable)[atomTypesIndex].second);
     if (atomTypes.size() != 1)
     {
-        printf("Optimization error: only supports one atom systems!\n");
+        printf("Generator error: only supports one atom systems!\n");
         return;
     }
     #ifdef DEBUG
@@ -101,7 +108,7 @@ void Generator::generate_opt_inputs(int numRadialFingerprints, double radialFing
     // if we cant find it then error
     if (oIndex == -1)
     {
-        printf("Optimization error: could not find %s in input file!\n", ("fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":radialscreened_0:o:").c_str());
+        printf("Generator error: could not find %s in input file!\n", ("fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":radialscreened_0:o:").c_str());
         return;
     }
     // then we take first number given
@@ -111,7 +118,7 @@ void Generator::generate_opt_inputs(int numRadialFingerprints, double radialFing
     int nIndex = utils::searchTable("fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":radialscreened_0:n:", inputTable);
     if (nIndex == -1)
     {
-        printf("Optimization error: could not find %s in input file!\n", ("fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":radialscreened_0:n:").c_str());
+        printf("Generator error: could not find %s in input file!\n", ("fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":radialscreened_0:n:").c_str());
         return;
     }
     int n = std::stoi(utils::splitString((*inputTable)[nIndex].second).at(0));
@@ -139,7 +146,7 @@ void Generator::generate_opt_inputs(int numRadialFingerprints, double radialFing
         int index = utils::searchTable(key, inputTable);
         if (index == -1)
         {
-            printf("Optization error: radial: cannot find %s in input file!\n", key.c_str());
+            printf("Generator error: radial: cannot find %s in input file!\n", key.c_str());
             return;
         }
         radialValues.push_back((*inputTable)[index].second);
@@ -157,7 +164,7 @@ void Generator::generate_opt_inputs(int numRadialFingerprints, double radialFing
         int index = utils::searchTable(key, inputTable);
         if (index == -1)
         {
-            printf("Optization error: bond; cannot find %s in input file!\n", key.c_str());
+            printf("Generator error: bond; cannot find %s in input file!\n", key.c_str());
             return;
         }
         bondValues.push_back((*inputTable)[index].second);
@@ -179,11 +186,11 @@ void Generator::generate_opt_inputs(int numRadialFingerprints, double radialFing
         if(pos != std::string::npos) alpha_kIndex = i;
     }
     if(m == -1){
-        printf("Optimization error: could not find m!\n");
+        printf("Generator error: could not find m!\n");
         return;
     }
     if(alpha_kIndex == -1){
-        printf("Optimization error: could not find alpha_k!\n");
+        printf("Generator error: could not find alpha_k!\n");
         return;
     }
     #ifdef DEBUG
@@ -226,7 +233,7 @@ void Generator::generate_opt_inputs(int numRadialFingerprints, double radialFing
     std::ofstream fingerprintsFile;
     fingerprintsFile.open(inputFile +".opt");
     if(!fingerprintsFile.is_open()){
-        printf("Optimizer error: cannot create optimizer input file!\n");
+        printf("Generator error: cannot create optimizer input file!\n");
         return;
     }
     for(const auto& entry : *inputTable)
@@ -243,7 +250,7 @@ void Generator::generate_opt_inputs(int numRadialFingerprints, double radialFing
     std::ofstream fingerprintsVectorFile;
     fingerprintsVectorFile.open(inputFile+".optv");
     if(!fingerprintsVectorFile.is_open()){
-        printf("Optimizer error: cannot create fingerprint vector file!\n");
+        printf("Generator error: cannot create fingerprint vector file!\n");
         return;
     }
 
@@ -312,17 +319,44 @@ void Generator::generate_opt_inputs(int numRadialFingerprints, double radialFing
     // std::filesystem::copy_file(inputFile, strcat(inputFile,".optimizer"));
 }
 
+// function for parsing top comment line with generation requirements
+void Generator::parse_parameters(){
+    /*std::ifstream f(inputFile);
+    if (!f)
+    {
+        printf("Generator error: cannot  access %s", inputFile.c_str());
+        return;
+    }
+    char c;
+    f.get(c);
+    if(c != '#'){
+        printf("Generator error: cannot find optimization parameters in %s",inputFile.c_str());
+    }
+    // grab first line
+    std::string line;
+    std::getline(f, line);
+    // loop over an assign values
+    std::string token;
+    
+    size_t pos = 0;
+    while(pos < line.size()){
+        token = line.substr(pos,line.find('='));
+        
+        if(token == "rf")
+    }*/
+}
+
 // function for parsing out fingerprint sections from
 std::map<int, std::pair<std::string, std::string> > *Generator::readFile()
 {
-    printf("Optimization: reading input file!\n");
+    printf("Generator: reading input file!\n");
     std::map<int, std::pair<std::string, std::string> > *pairs = new std::map<int, std::pair<std::string, std::string> >();
 
     // open file for reading
     std::ifstream f(inputFile);
     if (!f)
     {
-        printf("Optimization error: cannot  access %s", inputFile.c_str());
+        printf("Generator error: cannot  access %s", inputFile.c_str());
         return NULL;
     }
 

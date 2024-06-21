@@ -17,12 +17,18 @@ namespace OPT
         ~Generator();
 
         NLA::Matrix* generate_fingerprint_matrix();
-        
+        int numRadialFingerprints; 
+        double radialFingerprintsLowerBound; 
+        double radialFingerprintsUpperBound; 
+        int numBondFingerprints; 
+        double bondFingerprintsLowerBound; 
+        double bondFingerprintsUpperBound;
     private:
         LAMMPS_NS::PairRANN* calibrator;
         std::string inputFile;
 
-        void generate_opt_inputs(int, double, double, int, double, double);
+        void generate_opt_inputs();
+        void parse_parameters();
         std::map<int, std::pair<std::string, std::string>> *readFile();
     };
 }

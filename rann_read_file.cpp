@@ -1,5 +1,4 @@
 #include "pair_spin_rann.h"
-#include "rann_activation.h"
 #include "rann_fingerprint.h"
 #include "rann_stateequation.h"
 using namespace LAMMPS_NS;
@@ -58,7 +57,6 @@ void PairRANN::read_file(char *filename)
     else if (linev[0]=="layersize") read_layer_size(linev,line1v,filename,linenum);
     else if (linev[0]=="weight") read_weight(linev,line1v,fp,filename,&linenum);
     else if (linev[0]=="bias") read_bias(linev,line1v,fp,filename,&linenum);
-    else if (linev[0]=="activationfunctions") read_activation_functions(linev,line1v,filename,linenum);
     else if (linev[0]=="screening") read_screening(linev,line1v,filename,linenum);
     else if (linev[0]=="stateequationsperelement") read_eospe(linev,line1v,filename,linenum);
     else if (linev[0]=="stateequations") read_eos(linev,line1v,filename,linenum);
@@ -70,7 +68,7 @@ void PairRANN::read_file(char *filename)
     else if (linev[0]=="calibrationparameters") {
         if (~is_lammps)read_parameters(linev,line1v,fp,filename,&linenum,linetemp);
     }
-    else errorf(filename,linenum-1,"Could not understand file syntax: unknown keyword");
+   // else errorf(filename,linenum-1,"Could not understand file syntax: unknown keyword");
     ptr=fgets(linetemp,longline,fp);
     linenum++;
     strtemp=utils::trim_comment(linetemp);
@@ -271,7 +269,7 @@ void PairRANN::read_layer_size(std::vector<std::string> line,std::vector<std::st
       if (j>0){
         activation[i][j-1] = new RANN::Activation*[net[i].dimensions[j]];
         for (int k=0;k<net[i].dimensions[j];k++){
-          activation[i][j-1][k] = new RANN::Activation(this);
+          //activation[i][j-1][k] = new RANN::Activation(this);
         }
       }
       return;
@@ -475,31 +473,6 @@ void PairRANN::read_bias(std::vector<std::string> line,std::vector<std::string> 
   errorf(filename,*linenum-1,"bias element not found in atom types");
 }
 
-void PairRANN::read_activation_functions(std::vector<std::string> line,std::vector<std::string> line1,char *filename,int linenum){
-  int i,l;
-  int nwords = line.size();
-  for (l=0;l<nelements;l++){
-    if (line[1].compare(elements[l])==0){
-      i = utils::inumeric(filename,linenum,line[2],true,lmp);
-      if (i>=net[l].layers || i<0)errorf(filename,linenum-1,"invalid activation layer");
-      if (dimensiondefined[l][i+1]==false) errorf(filename,linenum-1,"network layer sizes must be defined before corresponding activation");
-      if (nwords==3){
-        for (int j = 0;j<net[l].dimensions[i+1];j++){
-          delete activation[l][i][j];
-          activation[l][i][j]=create_activation(line1[0].c_str());
-        }
-	    }
-	    else if (nwords>3){
-		    int j = utils::inumeric(filename,linenum,line[3],true,lmp);
-		    delete activation[l][i][j];
-		    activation[l][i][j]=create_activation(line1[0].c_str());
-	    }
-      return;
-    }
-  }
-  errorf(filename,linenum-1,"activation function element not found in atom types");
-}
-
 void PairRANN::read_eospe(std::vector<std::string> line,std::vector<std::string> line1,char *filename,int linenum) {
   int i;
   if (nelements == -1)errorf(filename,linenum-1,"atom types must be defined before equations of state per element in potential file.");
@@ -650,7 +623,7 @@ bool PairRANN::check_potential(){
     if (net[i].dimensions[0]>fmax)fmax=net[i].dimensions[0];
     for (j=0;j<net[i].layers-1;j++){
       for (int k=0;k<net[i].dimensions[j+1];k++) {
-        if (activation[i][j][k]->empty)errorf(FLERR,"undefined activations");//undefined activations
+        //if (activation[i][j][k]->empty)errorf(FLERR,"undefined activations");//undefined activations
       }
       for (int k=0;k<net[i].bundles[j];k++){
         if (!bundle_inputdefined[i][j][k]){

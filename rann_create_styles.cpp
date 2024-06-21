@@ -2,15 +2,6 @@
 #define CREATE_STYLES_H_
 
 #include "pair_spin_rann.h"
-#include "rann_activation_linear.h"
-#include "rann_activation_tanh.h"
-#include "rann_activation_ttanh.h"
-#include "rann_activation_tanhtwist.h"
-#include "rann_activation_sig_i.h"
-#include "rann_activation_capped.h"
-#include "rann_activation_sharpcapped.h"
-#include "rann_activation_slowcapped.h"
-#include "rann_activation_zero.h"
 #include "rann_fingerprint_bond.h"
 #include "rann_fingerprint_bondscreened.h"
 #include "rann_fingerprint_bondscreenedspin.h"
@@ -71,38 +62,7 @@ RANN::Fingerprint *PairRANN::create_fingerprint(const char *style)
 }
 
 
-RANN::Activation *PairRANN::create_activation(const char *style)
-{
-  if (strcmp(style,"linear")==0) {
-    return new RANN::Activation_linear(this);
-  }
-  else if (strcmp(style,"tanh")==0) {
-    return new RANN::Activation_tanh(this);
-  }
-  else if (strcmp(style,"ttanh")==0) {
-    return new RANN::Activation_ttanh(this);
-  }
-  else if (strcmp(style,"tanhtwist")==0) {
-    return new RANN::Activation_tanhtwist(this);
-  }
-  else if (strcmp(style,"sigI")==0) {
-    return new RANN::Activation_sigI(this);
-  }
-  else if (strcmp(style,"capped")==0) {
-	return new RANN::Activation_capped(this);
-  }
-  else if (strcmp(style,"sharpcapped")==0) {
-	return new RANN::Activation_sharpcapped(this);
-  }
-  else if (strcmp(style,"slowcapped")==0) {
-	return new RANN::Activation_slowcapped(this);
-  }
-  else if (strcmp(style,"zero")==0) {
-	return new RANN::Activation_zero(this);
-  }
-  errorf(FLERR,"Unknown activation style");
-  return nullptr;
-}
+
 
 
 RANN::State *PairRANN::create_state(const char *style)
