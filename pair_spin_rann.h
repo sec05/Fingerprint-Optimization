@@ -36,8 +36,6 @@ public:
 	PairRANN(char *);
 	~PairRANN();
 	void setup();
-	void run();
-	void finish();
 
 	//global parameters read from file
 	char *algorithm;
@@ -220,36 +218,20 @@ public:
 	void screen_neighbor_list(double *,double *,double *,int *,int *,int *,int,int,bool*,double*,double*,double*,double*,double*,double*,double*);
 	void compute_fingerprints();
 	void separate_validation();
-	void normalize_data();
 	int count_unique_species(int*,int);
 
 	//handle network
 	void create_random_weights(int,int,int,int,int);
 	void create_random_biases(int,int,int,int);
 	void create_identity_wb(int,int,int,int,int);
-	void jacobian_convolution(double *,double *,int *,int,int,NNarchitecture *);
-	void forward_pass(double *,int *,int,NNarchitecture *);
-	void get_per_atom_energy(double **,int *,int,NNarchitecture *);
-	void propagateforward(double *,double **,int ,int ,int, double*,double*,double*,double*,int *,int, NNarchitecture *); 
-	void propagateforwardspin(double *,double **,double **,double **,int ,int ,int, double*,double*,double*,double*,double*,double*,double*,double*,double*,double*,double*,double*,double*,int *,int, NNarchitecture *); 
-	void flatten_beta(NNarchitecture*,double*);//fill beta vector from net structure
-	void unflatten_beta(NNarchitecture*,double*);//fill net structure from beta vector
 	void copy_network(NNarchitecture*,NNarchitecture*);
-	void normalize_net(NNarchitecture*);
 	void unnormalize_net(NNarchitecture*);
-
-	//run fitting
-	void levenburg_marquardt_ch();
-	void conjugate_gradient();
-	void levenburg_marquardt_linesearch();
-	void bfgs();
 
 	//utility and misc
 	void allocate(const std::vector<std::string> &);//called after reading element list, but before reading the rest of the potential
 	bool check_parameters();	
 	void update_stack_size();
 	int factorial(int);
-	void write_potential_file(bool,char*,int,double);
 	void errorf(const std::string&, int,const char *);
 	void errorf(char *, int,const char *);
 	void errorf(const char *);
@@ -258,15 +240,6 @@ public:
 	int count_words(char *,char *);
 	void qrsolve(double *,int,int,double*,double *);
 	void chsolve(double *,int,double*,double *);
-	
-	//debugs:
-	void write_debug_level1(double*,double*);
-	void write_debug_level2(double*,double*);
-	void write_debug_level3(double*,double*,double*,double*);
-	void write_debug_level4(double*,double*);
-	void write_debug_level5(double*,double*);
-	void write_debug_level5_spin(double*,double*);
-	void write_debug_level6(double*,double*);
 
 	//create styles
   	RANN::Fingerprint *create_fingerprint(const char *);
