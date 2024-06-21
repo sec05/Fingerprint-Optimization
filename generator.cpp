@@ -29,8 +29,9 @@ NLA::Matrix* Generator::generate_fingerprint_matrix(){
     std::cout << "generated input!"<<std::endl;
     // then pass it through set FOR NOW
     inputFile += ".opt";
-    char* f = new char[inputFile.size()+1];
-    std::strcpy(f,inputFile.c_str());
+    std::string temp = "./Optimizer Output/"+inputFile; 
+    char* f = new char[temp.size()+1];
+    std::strcpy(f,temp.c_str());
     calibrator = new PairRANN(f);
     calibrator->setup();
    // need to find the matrix size to allocate **FIND BETTER METHOD**
@@ -48,7 +49,7 @@ NLA::Matrix* Generator::generate_fingerprint_matrix(){
     std::ofstream matrixFile;
     NLA::Matrix* m = new NLA::Matrix(rows,columns);
     int r = 0;
-    matrixFile.open(inputFile+".matrix");
+    matrixFile.open("./Optimizer Output/"+inputFile+".matrix");
     for(int n = 0; n < calibrator->nsims; n++){
         LAMMPS_NS::PairRANN::Simulation& sim = calibrator->sims[n];
         for(int i = 0; i < sim.inum; i++){
@@ -229,9 +230,9 @@ void Generator::generate_opt_inputs()
     inputTable->at(rIndex).second = radials;
     
     // we now write to entire map back to a new file to save space
-    
+    std::filesystem::create_directories("./Optimizer Output");
     std::ofstream fingerprintsFile;
-    fingerprintsFile.open(inputFile +".opt");
+    fingerprintsFile.open("./Optimizer Output/"+inputFile +".opt");
     if(!fingerprintsFile.is_open()){
         printf("Generator error: cannot create optimizer input file!\n");
         return;
@@ -248,7 +249,7 @@ void Generator::generate_opt_inputs()
     #endif
     // open file to write generated columns
     std::ofstream fingerprintsVectorFile;
-    fingerprintsVectorFile.open(inputFile+".optv");
+    fingerprintsVectorFile.open("./Optimizer Output/"+inputFile+".optv");
     if(!fingerprintsVectorFile.is_open()){
         printf("Generator error: cannot create fingerprint vector file!\n");
         return;
