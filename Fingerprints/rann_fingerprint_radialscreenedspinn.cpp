@@ -28,14 +28,14 @@ do not necessarily reflect the views of the United States Army.​”
 
 DISTRIBUTION A. Approved for public release; distribution unlimited. OPSEC#4918
  */
-#include "rann_fingerprint_radialspin.h"
-#include "pair_spin_rann.h"
+#include "rann_fingerprint_radialscreenedspinn.h"
+#include "../pair_spin_rann.h"
 
 #include <cmath>
 
 using namespace LAMMPS_NS::RANN;
 
-Fingerprint_radialspin::Fingerprint_radialspin(PairRANN *_pair) : Fingerprint(_pair)
+Fingerprint_radialscreenedspinn::Fingerprint_radialscreenedspinn(PairRANN *_pair) : Fingerprint(_pair)
 {
   n_body_type = 2;
   dr = 0;
@@ -46,16 +46,18 @@ Fingerprint_radialspin::Fingerprint_radialspin(PairRANN *_pair) : Fingerprint(_p
   nmax = 0;
   omin = 0;
   id = -1;
-  style = "radialspin";
+  style = "radialscreenedspinn";
   atomtypes = new int[n_body_type];
   empty = true;
   fullydefined = false;
-  _pair->allscreen = false;
+  _pair->doscreen = true;
+  screen = true;
   _pair->dospin = true;
   spin = true;
+  spinn = 1;
 }
 
-Fingerprint_radialspin::~Fingerprint_radialspin()
+Fingerprint_radialscreenedspinn::~Fingerprint_radialscreenedspinn()
 {
   delete[] atomtypes;
   delete[] radialtable;
@@ -64,7 +66,7 @@ Fingerprint_radialspin::~Fingerprint_radialspin()
   delete[] rinvsqrttable;
 }
 
-bool Fingerprint_radialspin::parse_values(std::string constant,std::vector<std::string> line1) {
+bool Fingerprint_radialscreenedspinn::parse_values(std::string constant,std::vector<std::string> line1) {
   int l;
   int nwords=line1.size();
   if (constant.compare("re")==0) {
@@ -86,6 +88,9 @@ bool Fingerprint_radialspin::parse_values(std::string constant,std::vector<std::
   else if (constant.compare("n")==0) {
     nmax = strtol(line1[0].c_str(),nullptr,10);
   }
+  else if (constant.compare("spinn")==0) {
+    spinn = strtol(line1[0].c_str(),nullptr,10);
+  }
   else if (constant.compare("o")==0) {
     omin = strtol(line1[0].c_str(),nullptr,10);
   }
@@ -95,7 +100,7 @@ bool Fingerprint_radialspin::parse_values(std::string constant,std::vector<std::
   return false;
 }
 
-void Fingerprint_radialspin::write_values(FILE *fid) {
+void Fingerprint_radialscreenedspinn::write_values(FILE *fid) {
   int i;
   fprintf(fid,"fingerprintconstants:");
   fprintf(fid,"%s",pair->elementsp[atomtypes[0]]);
@@ -142,10 +147,17 @@ void Fingerprint_radialspin::write_values(FILE *fid) {
   }
   fprintf(fid,":%s_%d:n:\n",style,id);
   fprintf(fid,"%d\n",nmax);
+  fprintf(fid,"fingerprintconstants:");
+  fprintf(fid,"%s",pair->elementsp[atomtypes[0]]);
+  for (i=1;i<n_body_type;i++) {
+    fprintf(fid,"_%s",pair->elementsp[atomtypes[i]]);
+  }
+  fprintf(fid,":%s_%d:spinn:\n",style,id);
+  fprintf(fid,"%d\n",spinn);
 }
 
 //called after fingerprint is fully defined and tables can be computed.
-void Fingerprint_radialspin::allocate()
+void Fingerprint_radialscreenedspinn::allocate()
 {
   int k,m;
   double r1;
@@ -170,84 +182,97 @@ void Fingerprint_radialspin::allocate()
 }
 
 //called after fingerprint is declared for i-j type, but before its parameters are read.
-void Fingerprint_radialspin::init(int *i,int _id)
+void Fingerprint_radialscreenedspinn::init(int *i,int _id)
 {
   empty = false;
   for (int j=0;j<n_body_type;j++) {atomtypes[j] = i[j];}
   id = _id;
 }
 
-void Fingerprint_radialspin::compute_fingerprint(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,double * dspinx,double *dspiny,double *dspinz,double *dspinxx,double *dspinxy,double *dspinxz,double *dspinyy,double *dspinyz,double *dspinzz,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int *jl)
+void Fingerprint_radialscreenedspinn::compute_fingerprint(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,double * dspinx,double *dspiny,double *dspinz,double *dspinxx,double *dspinxy,double *dspinxz,double *dspinyy,double *dspinyz,double *dspinzz,double *Sik, double *dSikx, double*dSiky, double *dSikz, double *dSijkx, double *dSijky, double *dSijkz, bool *Bij,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int *jl)
 {
-  int nelements = pair->nelements;
-  int res = pair->res;
-  int i,j,jj,itype,jtype,l;
-  int *ilist,**firstneigh;
-  double delx,dely,delz,rsq;
-  //
-  PairRANN::Simulation *sim = &pair->sims[sid];
-  int count=0;
-  int *type = sim->type;
-  ilist = sim->ilist;
-  double cutmax = pair->cutmax;
-  i = ilist[ii];
-  itype = pair->map[type[i]];
-  int f = pair->net[itype].dimensions[0];
-  double cutinv2 = 1/cutmax/cutmax;
-  double *si = sim->s[i];
-  firstneigh = sim->firstneigh;
-  //loop over neighbors
-  for (jj = 0; jj < jnum; jj++) {
-    j = jl[jj];
-    jtype =tn[jj];
-    if (atomtypes[1] != nelements && atomtypes[1] != jtype)continue;
-    delx = xn[jj];
-    dely = yn[jj];
-    delz = zn[jj];
-    rsq = delx*delx + dely*dely + delz*delz;
-    if (rsq > rc*rc)continue;
-    count = startingneuron;
-    double r1 = (rsq*((double)res)*cutinv2);
-    int m1 = (int)r1;
-    if (m1>res || m1<1) {pair->errorf(FLERR,"invalid neighbor radius!");}
-    if (radialtable[m1]==0) {continue;}
-    double *sj = sim->s[j];
-    double sp = si[0]*sj[0]+si[1]*sj[1]+si[2]*sj[2];
-    //cubic interpolation from tables
-    double *p1 = &radialtable[m1*(nmax-omin+1)];
-    double *p2 = &radialtable[(m1+1)*(nmax-omin+1)];
-    double *p3 = &radialtable[(m1+2)*(nmax-omin+1)];
-    double *p0 = &radialtable[(m1-1)*(nmax-omin+1)];
-    double *q = &dfctable[m1-1];
-    double *rinvs = &rinvsqrttable[m1-1];
-    r1 = r1-trunc(r1);
-    double dfc = q[1] + 0.5 * r1*(q[2] - q[0] + r1*(2.0*q[0] - 5.0*q[1] + 4.0*q[2] - q[3] + r1*(3.0*(q[1] - q[2]) + q[3] - q[0])));
-    double ri = rinvs[1] + 0.5 * r1*(rinvs[2] - rinvs[0] + r1*(2.0*rinvs[0] - 5.0*rinvs[1] + 4.0*rinvs[2] - rinvs[3] + r1*(3.0*(rinvs[1] - rinvs[2]) + rinvs[3] - rinvs[0])));
-    for (l=0;l<=(nmax-omin);l++) {
-      double rt = p1[l]+0.5*r1*(p2[l]-p0[l]+r1*(2.0*p0[l]-5.0*p1[l]+4.0*p2[l]-p3[l]+r1*(3.0*(p1[l]-p2[l])+p3[l]-p0[l])));
-      dspinx[jj*f+count]+=rt*si[0];
-      dspiny[jj*f+count]+=rt*si[1];
-      dspinz[jj*f+count]+=rt*si[2];
-      dspinx[jnum*f+count]+=rt*sj[0];
-      dspiny[jnum*f+count]+=rt*sj[1];
-      dspinz[jnum*f+count]+=rt*sj[2];
-      rt *= sp;
-      features[count]+=rt;
-      rt *= (l+omin)/rsq+(-alpha[l]/re+dfc)*ri;
-      //update neighbor's features
-      dfeaturesx[jj*f+count]+=rt*delx;
-      dfeaturesy[jj*f+count]+=rt*dely;
-      dfeaturesz[jj*f+count]+=rt*delz;
-      //update atom's features
-      dfeaturesx[jnum*f+count]-=rt*delx;
-      dfeaturesy[jnum*f+count]-=rt*dely;
-      dfeaturesz[jnum*f+count]-=rt*delz;
-      count++;
+    int nelements = pair->nelements;
+    int res = pair->res;
+    int i,j,jj,itype,jtype,l,kk;
+    double delx,dely,delz,rsq;
+    int *ilist;
+    PairRANN::Simulation *sim = &pair->sims[sid];
+    int count=0;
+    int *type = sim->type;
+    ilist = sim->ilist;
+    double cutmax = pair->cutmax;
+    i = ilist[ii];
+    itype = pair->map[type[i]];
+    int f = pair->net[itype].dimensions[0];
+    double cutinv2 = 1/cutmax/cutmax;
+    double *si = sim->s[i];
+    //loop over neighbors
+    for (jj = 0; jj < jnum; jj++) {
+      if (Bij[jj]==false) {continue;}
+      jtype = tn[jj];
+      if (atomtypes[1] != nelements && atomtypes[1] != jtype)continue;
+      delx = xn[jj];
+      dely = yn[jj];
+      delz = zn[jj];
+      rsq = delx*delx + dely*dely + delz*delz;
+      if (rsq > rc*rc)continue;
+      count = startingneuron;
+      double r1 = (rsq*((double)res)*cutinv2);
+      int m1 = (int)r1;
+      if (m1>res || m1<1) {pair->errorf(FLERR,"invalid neighbor radius!");}
+      if (radialtable[m1]==0) {continue;}
+      j=jl[jj];
+      double *sj = sim->s[j];
+      double sp = si[0]*sj[0]+si[1]*sj[1]+si[2]*sj[2];
+      double spn = pow(sp,spinn);
+      double dspn = spinn*pow(sp,spinn-1);
+      //cubic interpolation from tables
+      double *p1 = &radialtable[m1*(nmax-omin+1)];
+      double *p2 = &radialtable[(m1+1)*(nmax-omin+1)];
+      double *p3 = &radialtable[(m1+2)*(nmax-omin+1)];
+      double *p0 = &radialtable[(m1-1)*(nmax-omin+1)];
+      double *q = &dfctable[m1-1];
+      double *rinvs = &rinvsqrttable[m1-1];
+      r1 = r1-trunc(r1);
+      double dfc = q[1] + 0.5 * r1*(q[2] - q[0] + r1*(2.0*q[0] - 5.0*q[1] + 4.0*q[2] - q[3] + r1*(3.0*(q[1] - q[2]) + q[3] - q[0])));
+      double ri = rinvs[1] + 0.5 * r1*(rinvs[2] - rinvs[0] + r1*(2.0*rinvs[0] - 5.0*rinvs[1] + 4.0*rinvs[2] - rinvs[3] + r1*(3.0*(rinvs[1] - rinvs[2]) + rinvs[3] - rinvs[0])));
+      for (l=0;l<=(nmax-omin);l++) {
+        double rt = Sik[jj]*(p1[l]+0.5*r1*(p2[l]-p0[l]+r1*(2.0*p0[l]-5.0*p1[l]+4.0*p2[l]-p3[l]+r1*(3.0*(p1[l]-p2[l])+p3[l]-p0[l]))));
+        //update neighbor's features
+        dspinx[jj*f+count]+=rt*si[0]*dspn;
+        dspiny[jj*f+count]+=rt*si[1]*dspn;
+        dspinz[jj*f+count]+=rt*si[2]*dspn;
+        dspinx[jnum*f+count]+=rt*sj[0]*dspn;
+        dspiny[jnum*f+count]+=rt*sj[1]*dspn;
+        dspinz[jnum*f+count]+=rt*sj[2]*dspn;
+        rt *= spn;
+        features[count]+=rt;
+        double rt1 = rt*((l+omin)/rsq+(-alpha[l]/re+dfc)*ri);
+        dfeaturesx[jj*f+count]+=rt1*delx+rt*dSikx[jj];
+        dfeaturesy[jj*f+count]+=rt1*dely+rt*dSiky[jj];
+        dfeaturesz[jj*f+count]+=rt1*delz+rt*dSikz[jj];
+        for (kk=0;kk<jnum;kk++) {
+          if (Bij[kk]==false) {continue;}
+          dfeaturesx[kk*f+count]+=rt*dSijkx[jj*jnum+kk];
+          dfeaturesy[kk*f+count]+=rt*dSijky[jj*jnum+kk];
+          dfeaturesz[kk*f+count]+=rt*dSijkz[jj*jnum+kk];
+        }
+        count++;
+      }
+    }
+    for (jj=0;jj<jnum;jj++) {
+      if (Bij[jj]==false) {continue;}
+      count = startingneuron;
+      for (l=0;l<=(nmax-omin);l++) {
+        dfeaturesx[jnum*f+count]-=dfeaturesx[jj*f+count];
+        dfeaturesy[jnum*f+count]-=dfeaturesy[jj*f+count];
+        dfeaturesz[jnum*f+count]-=dfeaturesz[jj*f+count];
+        count++;
+      }
     }
   }
-}
 
-int Fingerprint_radialspin::get_length()
+int Fingerprint_radialscreenedspinn::get_length()
 {
   return nmax-omin+1;
 }

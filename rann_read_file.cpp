@@ -1,6 +1,6 @@
 #include "pair_spin_rann.h"
-#include "rann_fingerprint.h"
-#include "rann_stateequation.h"
+#include "Fingerprints/rann_fingerprint.h"
+#include "State/rann_stateequation.h"
 using namespace LAMMPS_NS;
 
 

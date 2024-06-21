@@ -1,5 +1,4 @@
-// clang-format off
-/* -*- c++ -*- ----------------------------------------------------------
+/* ----------------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
    https://www.lammps.org/ Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
@@ -29,59 +28,54 @@ do not necessarily reflect the views of the United States Army.​”
 DISTRIBUTION A. Approved for public release; distribution unlimited. OPSEC#4918
  */
 
-#include "rann_fingerprint_temperature.h"
-#include "pair_spin_rann.h"
+#include "rann_fingerprint.h"
+#include "../pair_spin_rann.h"
 
 #include <cmath>
 
 using namespace LAMMPS_NS::RANN;
 
-Fingerprint_temperature::Fingerprint_temperature(PairRANN *_pair) : Fingerprint(_pair)
+Fingerprint::Fingerprint(PairRANN *_pair)
 {
-  n_body_type = 1;
-  rc = 0;
-  id = -1;
-  style = "temperature";
-  atomtypes = new int[n_body_type];
-  empty = false;
-  fullydefined = true;
-  _pair->allscreen = false;
+  spin = false;
+  screen = false;
+  empty = true;
+  fullydefined = false;
+  n_body_type = 0;
+  style = "empty";
+  pair = _pair;
 }
 
-Fingerprint_temperature::~Fingerprint_temperature()
+// Smooth cutoff, goes from 1 to zero over the interval rc-dr to rc.
+// Same as MEAM uses. Used by generateradialtable and generatexpcuttable.
+
+double Fingerprint::cutofffunction(double r, double rc, double dr)
 {
-  delete[] atomtypes;
+  double out;
+  if (r < (rc - dr))
+    out = 1;
+  else if (r > rc)
+    out = 0;
+  else {
+    out = 1 - (rc - r) / dr;
+    out *= out;
+    out *= out;
+    out = 1 - out;
+    out *= out;
+  }
+  return out;
 }
 
-bool Fingerprint_temperature::parse_values(std::string constant,std::vector<std::string> line1) {
-  return false;
-}
-
-void Fingerprint_temperature::write_values(FILE *fid) {
- 
-}
-
-//called after fingerprint is fully defined and tables can be computed.
-void Fingerprint_temperature::allocate()
+void Fingerprint::generate_rinvssqrttable()
 {
-}
-
-//called after fingerprint is declared for i-j type, but before its parameters are read.
-void Fingerprint_temperature::init(int *i,int _id)
-{
-  empty = false;
-  for (int j=0;j<n_body_type;j++) {atomtypes[j] = i[j];}
-  id = _id;
-}
-
-void Fingerprint_temperature::compute_fingerprint(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/)
-{
-  PairRANN::Simulation *sim = &pair->sims[sid];
-  int count=startingneuron;
-  features[count]=sim->temp;
-}
-
-int Fingerprint_temperature::get_length()
-{
-  return 1;
+  int buf = 5;
+  int m;
+  double r1;
+  double cutmax = pair->cutmax;
+  int res = pair->res;
+  rinvsqrttable = new double[res + buf];
+  for (m = 0; m < (res + buf); m++) {
+    r1 = cutmax * cutmax * (double) (m) / (double) (res);
+    rinvsqrttable[m] = 1 / sqrt(r1);
+  }
 }

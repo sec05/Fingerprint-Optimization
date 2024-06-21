@@ -3,9 +3,9 @@ Ti
 mass:Ti:
 47.867000
 fingerprintsperelement:Ti:
-11
+3
 fingerprints:Ti_Ti:
-radialscreened_0 radialscreened_1 radialscreened_2 radialscreened_3 radialscreened_4 radialscreened_5 radialscreened_6 radialscreened_7 radialscreened_8 radialscreened_9
+radialscreened_0 radialscreened_1
 fingerprints:Ti_Ti_Ti:
 bondscreened_0
 screening:Ti_Ti_Ti:Cmax:
@@ -15,7 +15,7 @@ screening:Ti_Ti_Ti:Cmin:
 networklayers:Ti:
 3
 layersize:Ti:0:
-21
+50
 layersize:Ti:1:
 14
 layersize:Ti:2:
@@ -102,106 +102,12 @@ fingerprintconstants:Ti_Ti:radialscreened_1:o:
 -1
 fingerprintconstants:Ti_Ti:radialscreened_1:n:
 3
-fingerprintconstants:Ti_Ti:radialscreened_2:re:
+fingerprintconstants:Ti_Ti_Ti:bondscreened_0:re:
 2.65
-fingerprintconstants:Ti_Ti:radialscreened_2:rc:
-9.000000
-fingerprintconstants:Ti_Ti:radialscreened_2:alpha:
-0.426051 0.652999 0.961533 0.857987 0.294026
-fingerprintconstants:Ti_Ti:radialscreened_2:dr:
-0.400000
-fingerprintconstants:Ti_Ti:radialscreened_2:o:
--1
-fingerprintconstants:Ti_Ti:radialscreened_2:n:
-3
-fingerprintconstants:Ti_Ti:radialscreened_3:re:
-2.65
-fingerprintconstants:Ti_Ti:radialscreened_3:rc:
-9.000000
-fingerprintconstants:Ti_Ti:radialscreened_3:alpha:
-0.414645 0.514893 0.789785 0.544273 0.093630
-fingerprintconstants:Ti_Ti:radialscreened_3:dr:
-0.400000
-fingerprintconstants:Ti_Ti:radialscreened_3:o:
--1
-fingerprintconstants:Ti_Ti:radialscreened_3:n:
-3
-fingerprintconstants:Ti_Ti:radialscreened_4:re:
-2.65
-fingerprintconstants:Ti_Ti:radialscreened_4:rc:
-9.000000
-fingerprintconstants:Ti_Ti:radialscreened_4:alpha:
-0.432260 0.844927 0.772846 0.191859 0.780367
-fingerprintconstants:Ti_Ti:radialscreened_4:dr:
-0.400000
-fingerprintconstants:Ti_Ti:radialscreened_4:o:
--1
-fingerprintconstants:Ti_Ti:radialscreened_4:n:
-3
-fingerprintconstants:Ti_Ti:radialscreened_5:re:
-2.65
-fingerprintconstants:Ti_Ti:radialscreened_5:rc:
-9.000000
-fingerprintconstants:Ti_Ti:radialscreened_5:alpha:
-0.181343 0.579141 0.314131 0.411985 0.992305
-fingerprintconstants:Ti_Ti:radialscreened_5:dr:
-0.400000
-fingerprintconstants:Ti_Ti:radialscreened_5:o:
--1
-fingerprintconstants:Ti_Ti:radialscreened_5:n:
-3
-fingerprintconstants:Ti_Ti:radialscreened_6:re:
-2.65
-fingerprintconstants:Ti_Ti:radialscreened_6:rc:
-9.000000
-fingerprintconstants:Ti_Ti:radialscreened_6:alpha:
-0.163922 0.334848 0.076218 0.174524 0.037300
-fingerprintconstants:Ti_Ti:radialscreened_6:dr:
-0.400000
-fingerprintconstants:Ti_Ti:radialscreened_6:o:
--1
-fingerprintconstants:Ti_Ti:radialscreened_6:n:
-3
-fingerprintconstants:Ti_Ti:radialscreened_7:re:
-2.65
-fingerprintconstants:Ti_Ti:radialscreened_7:rc:
-9.000000
-fingerprintconstants:Ti_Ti:radialscreened_7:alpha:
-0.467415 0.674113 0.066703 0.389782 0.165399
-fingerprintconstants:Ti_Ti:radialscreened_7:dr:
-0.400000
-fingerprintconstants:Ti_Ti:radialscreened_7:o:
--1
-fingerprintconstants:Ti_Ti:radialscreened_7:n:
-3
-fingerprintconstants:Ti_Ti:radialscreened_8:re:
-2.65
-fingerprintconstants:Ti_Ti:radialscreened_8:rc:
-9.000000
-fingerprintconstants:Ti_Ti:radialscreened_8:alpha:
-0.990804 0.870639 0.672653 0.587706 0.255014
-fingerprintconstants:Ti_Ti:radialscreened_8:dr:
-0.400000
-fingerprintconstants:Ti_Ti:radialscreened_8:o:
--1
-fingerprintconstants:Ti_Ti:radialscreened_8:n:
-3
-fingerprintconstants:Ti_Ti:radialscreened_9:re:
-2.65
-fingerprintconstants:Ti_Ti:radialscreened_9:rc:
-9.000000
-fingerprintconstants:Ti_Ti:radialscreened_9:alpha:
-0.593045 0.271720 0.270481 0.095930 0.632556
-fingerprintconstants:Ti_Ti:radialscreened_9:dr:
-0.400000
-fingerprintconstants:Ti_Ti:radialscreened_9:o:
--1
-fingerprintconstants:Ti_Ti:radialscreened_9:n:
-3
 fingerprintconstants:Ti_Ti_Ti:bondscreened_0:rc:
 9.000000
 fingerprintconstants:Ti_Ti_Ti:bondscreened_0:alphak:
-0.151273 0.948862 0.042604 0.735089 0.465497 0.222540 0.571484 0.604569 0.698002 0.664686
+0.426051 0.652999 0.961533 0.857987 0.294026 0.414645 0.514893 0.789785 0.544273 0.093630
 fingerprintconstants:Ti_Ti_Ti:bondscreened_0:dr:
 5.056157
 fingerprintconstants:Ti_Ti_Ti:bondscreened_0:k:

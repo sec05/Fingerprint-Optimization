@@ -1,6 +1,6 @@
 
 #include "rann_state_eamscreenedsingle.h"
-#include "pair_spin_rann.h"
+#include "../pair_spin_rann.h"
 #include <cmath>
 
 using namespace LAMMPS_NS::RANN;

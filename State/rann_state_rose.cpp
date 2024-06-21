@@ -1,6 +1,6 @@
 
 #include "rann_state_rose.h"
-#include "pair_spin_rann.h"
+#include "../pair_spin_rann.h"
 
 #include <cmath>
 

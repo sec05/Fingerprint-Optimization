@@ -1,6 +1,6 @@
 
 #include "rann_state_eamscreenedr.h"
-#include "pair_spin_rann.h"
+#include "../pair_spin_rann.h"
 #include <cmath>
 #include "rann_state_eam_ref_b1.h"
 #include "rann_state_eam_ref_b2.h"

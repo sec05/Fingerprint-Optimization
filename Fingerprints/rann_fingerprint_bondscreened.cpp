@@ -30,7 +30,7 @@ DISTRIBUTION A. Approved for public release; distribution unlimited. OPSEC#4918
  */
 
 #include "rann_fingerprint_bondscreened.h"
-#include "pair_spin_rann.h"
+#include "../pair_spin_rann.h"
 
 #include <cmath>
 

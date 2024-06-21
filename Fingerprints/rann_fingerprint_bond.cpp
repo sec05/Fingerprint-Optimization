@@ -28,14 +28,15 @@ do not necessarily reflect the views of the United States Army.​”
 
 DISTRIBUTION A. Approved for public release; distribution unlimited. OPSEC#4918
  */
-#include "rann_fingerprint_bondspin.h"
-#include "pair_spin_rann.h"
+
+#include "rann_fingerprint_bond.h"
+#include "../pair_spin_rann.h"
 
 #include <cmath>
 
 using namespace LAMMPS_NS::RANN;
 
-Fingerprint_bondspin::Fingerprint_bondspin(PairRANN *_pair) : Fingerprint(_pair)
+Fingerprint_bond::Fingerprint_bond(PairRANN *_pair) : Fingerprint(_pair)
 {
   n_body_type = 3;
   dr = 0;
@@ -46,15 +47,13 @@ Fingerprint_bondspin::Fingerprint_bondspin(PairRANN *_pair) : Fingerprint(_pair)
   kmax = 0;
   mlength = 0;
   id = -1;
-  style = "bondspin";
+  style = "bond";
   atomtypes = new int[n_body_type];
   empty = true;
   _pair->allscreen = false;
-  _pair->dospin = true;
-  spin = true;
 }
 
-Fingerprint_bondspin::~Fingerprint_bondspin() {
+Fingerprint_bond::~Fingerprint_bond() {
   delete[] alpha_k;
   delete[] atomtypes;
   delete[] expcuttable;
@@ -74,7 +73,7 @@ Fingerprint_bondspin::~Fingerprint_bondspin() {
   delete[] rinvsqrttable;
 }
 
-bool Fingerprint_bondspin::parse_values(std::string constant,std::vector<std::string> line1) {
+bool Fingerprint_bond::parse_values(std::string constant,std::vector<std::string> line1) {
   int nwords,l;
   nwords=line1.size();
   if (constant.compare("re")==0) {
@@ -107,7 +106,7 @@ bool Fingerprint_bondspin::parse_values(std::string constant,std::vector<std::st
   return false;
 }
 
-void Fingerprint_bondspin::write_values(FILE *fid) {
+void Fingerprint_bond::write_values(FILE *fid) {
   int i;
   fprintf(fid,"fingerprintconstants:");
   fprintf(fid,"%s",pair->elementsp[atomtypes[0]]);
@@ -156,7 +155,7 @@ void Fingerprint_bondspin::write_values(FILE *fid) {
   fprintf(fid,"%d\n",mlength);
 }
 
-void Fingerprint_bondspin::init(int *i,int _id) {
+void Fingerprint_bond::init(int *i,int _id) {
   for (int j=0;j<n_body_type;j++) {atomtypes[j] = i[j];}
   re = 0;
   rc = 0;
@@ -170,18 +169,18 @@ void Fingerprint_bondspin::init(int *i,int _id) {
 }
 
 //number of neurons defined by this fingerprint
-int Fingerprint_bondspin::get_length() {
+int Fingerprint_bond::get_length() {
   return mlength*kmax;
 }
 
-void Fingerprint_bondspin::allocate() {
+void Fingerprint_bond::allocate() {
   generate_exp_cut_table();
   generate_coefficients();
   generate_rinvssqrttable();
 }
 
 //Generate table of complex functions for quick reference during compute. Used by do3bodyfeatureset_singleneighborloop and do3bodyfeatureset_doubleneighborloop.
-void Fingerprint_bondspin::generate_exp_cut_table() {
+void Fingerprint_bond::generate_exp_cut_table() {
   int m,n;
   double r1;
   int buf = 5;
@@ -204,8 +203,8 @@ void Fingerprint_bondspin::generate_exp_cut_table() {
 }
 
 //Generate table of complex functions for quick reference during compute. Used by do3bodyfeatureset_singleneighborloop.
-void Fingerprint_bondspin::generate_coefficients() {      //calculates multinomial coefficient for each term
-    int p,mb,mc;
+void Fingerprint_bond::generate_coefficients() {      //calculates multinomial coefficient for each term
+  int p,mb,mc;
   int n,p1,i1;
   mb = mlength;
   mc=(mb*(mb+1))>>1;
@@ -294,19 +293,20 @@ void Fingerprint_bondspin::generate_coefficients() {      //calculates multinomi
 
 
 //Called by getproperties. Gets 3-body features and dfeatures
-void Fingerprint_bondspin::compute_fingerprint(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,double * dspinx,double *dspiny,double *dspinz,double *dspinxx,double *dspinxy,double *dspinxz,double *dspinyy,double *dspinyz,double *dspinzz,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int *jl) {
+void Fingerprint_bond::compute_fingerprint(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz, int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int *jl) {
   //select the more efficient algorithm for this particular potential and environment.
   if (jnum*2>(mlength+1)*mlength*20) {
-    do3bodyfeatureset_singleneighborloop(features,dfeaturesx,dfeaturesy,dfeaturesz,dspinx,dspiny,dspinz,dspinxx,dspinxy,dspinxz,dspinyy,dspinyz,dspinzz,ii,sid,xn,yn,zn,tn,jnum,jl);
+    do3bodyfeatureset_singleneighborloop(features,dfeaturesx,dfeaturesy,dfeaturesz,ii,sid,xn,yn,zn,tn,jnum,jl);
   }
   else{
-    do3bodyfeatureset_doubleneighborloop(features,dfeaturesx,dfeaturesy,dfeaturesz,dspinx,dspiny,dspinz,dspinxx,dspinxy,dspinxz,dspinyy,dspinyz,dspinzz,ii,sid,xn,yn,zn,tn,jnum,jl);
+    do3bodyfeatureset_doubleneighborloop(features,dfeaturesx,dfeaturesy,dfeaturesz,ii,sid,xn,yn,zn,tn,jnum,jl);
+
   }
 }
 
 //Called by do3bodyfeatureset. Algorithm for high neighbor numbers and small series of bond angle powers
-void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,double * dspinx,double *dspiny,double *dspinz,double *dspinxx,double *dspinxy,double *dspinxz,double *dspinyy,double *dspinyz,double *dspinzz,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int *jl) {
-  int i,j,jj,itype,jtype,kk,m,n,mcount,a,a1,a2,ai;
+void Fingerprint_bond::do3bodyfeatureset_singleneighborloop(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/) {
+  int i,jj,itype,jtype,kk,m,n,mcount,a,a1,a2,ai;
   double delx,dely,delz,rsq;
   int *ilist;
   int count=0;
@@ -323,7 +323,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
   double expr[jnum][kmax+12];
   int p = kmax;
   int countmb=((mlength)*(mlength+1))>>1;
-  double *si = sim->s[i];
   // calculate interpolation expr, rinvs and dfc, for each neighbor
   for (jj = 0; jj < jnum; jj++) {
     jtype = tn[jj];
@@ -382,10 +381,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
   int mb = mlength;
   count = startingneuron;
   double Bb[mb];
-  double Bbs[mb];
-  double dBbsx[mb];
-  double dBbsy[mb];
-  double dBbsz[mb];
   double dBbx;
   double dBby;
   double dBbz;
@@ -406,10 +401,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
     for (n=0;n<kb;n++) {
       for (a1=0;a1<mb;a1++) {
         Bb[a1]=0;
-        Bbs[a1]=0;
-        dBbsx[a1]=0;
-        dBbsy[a1]=0;
-        dBbsz[a1]=0;
       }
       ai = n;
       double y1 = alpha_k[ai]/re;
@@ -420,9 +411,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
         if (atomtypes[1] != nelements && atomtypes[1] != jtype) {
           continue;
         }
-        j = jl[jj];
-        double *sj = sim->s[j];
-        double sp = si[0]*sj[0]+si[1]*sj[1]+si[2]*sj[2];
         double yprod = expr[jj][ai];
         double *y4 = &expr[jj][p];
         for (a2=0;a2<a;a2++) {
@@ -430,25 +418,13 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
         }
         for (a2=a;a2<mb;a2++) {
           Bb[a2]=Bb[a2]+yprod;
-          Bbs[a2]=Bbs[a2]+yprod*sp;
-          dBbsx[a2] = dBbsx[a2]+yprod*sj[0];
-          dBbsy[a2] = dBbsx[a2]+yprod*sj[1];
-          dBbsz[a2] = dBbsx[a2]+yprod*sj[2];
           yprod *= y4[M[a2+1]];
         }
       }
       if (atomtypes[1]!=atomtypes[2]) {//Bb!=Bg
         double Bg[mb];
-        double Bgs[mb];
-        double dBgsx[mb];
-        double dBgsy[mb];
-        double dBgsz[mb];
         for (a1=0;a1<mb;a1++) {
           Bg[a1]=0;
-          Bgs[a1]=0;
-          dBgsx[a1]=0;
-          dBgsy[a1]=0;
-          dBgsz[a1]=0;
         }
         ai = n;
         double y1 = alpha_k[ai]/re;
@@ -459,9 +435,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
           if (atomtypes[2] != nelements && atomtypes[2] != jtype) {
             continue;
           }
-          j = jl[jj];
-          double *sj = sim->s[j];
-          double sp = si[0]*sj[0]+si[1]*sj[1]+si[2]*sj[2];
           double yprod = expr[jj][ai];
           double *y4 = &expr[jj][p];
           for (a2=0;a2<a;a2++) {
@@ -469,10 +442,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
           }
           for (a2=a;a2<mb;a2++) {
             Bg[a2]=Bg[a2]+yprod;
-            Bgs[a2]=Bgs[a2]+yprod*sp;
-            dBgsx[a2]=dBgsx[a2]+yprod*sj[0];
-            dBgsy[a2]=dBgsy[a2]+yprod*sj[1];
-            dBgsz[a2]=dBgsz[a2]+yprod*sj[2];
             yprod *= y4[M[a2+1]];
           }
         }
@@ -484,9 +453,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
           if (atomtypes[2] != nelements && atomtypes[2] != jtype) {
             continue;
           }
-          j = jl[jj];
-          double *sj = sim->s[j];
-          double sp = si[0]*sj[0]+si[1]*sj[1]+si[2]*sj[2];
           double *y3 = &expr[jj][p+3];
           double *y4 = &expr[jj][p];
           ai = n;
@@ -496,25 +462,13 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
           }
           ai = n*(mb)+a+count+jj*f;
           for (a2=a;a2<mb;a2++) {
-            B1 = Bbs[a2]*_coeff[a2]*yprod*sp;
+            B1 = Bb[a2]*_coeff[a2]*yprod;
             dBbx = -B1*(y1*y4[0]+y3[0]-_coeffx[a2]*y3[1]+a2*y3[2]);
             dBby = -B1*(y1*y4[1]+y3[3]-_coeffy[a2]*y3[4]+a2*y3[5]);
             dBbz = -B1*(y1*y4[2]+y3[6]-_coeffz[a2]*y3[7]+a2*y3[8]);
             dfeaturesx[ai] += dBbx;
             dfeaturesy[ai] += dBby;
             dfeaturesz[ai] += dBbz;
-            dspinx[ai] += yprod*Bbs[a2]*_coeff[a2]*si[0];
-            dspiny[ai] += yprod*Bbs[a2]*_coeff[a2]*si[1];
-            dspinz[ai] += yprod*Bbs[a2]*_coeff[a2]*si[2];
-            dspinx[ai-jj*f+jnum*f] += yprod*Bbs[a2]*_coeff[a2]*sj[0];
-            dspiny[ai-jj*f+jnum*f] += yprod*Bbs[a2]*_coeff[a2]*sj[1];
-            dspinz[ai-jj*f+jnum*f] += yprod*Bbs[a2]*_coeff[a2]*sj[2];
-            dspinxx[ai-jj*f+jnum*f] += yprod*dBbsx[a2]*_coeff[a]*sj[0];
-            dspinxy[ai-jj*f+jnum*f] += yprod*dBbsx[a2]*_coeff[a]*sj[1];
-            dspinxz[ai-jj*f+jnum*f] += yprod*dBbsx[a2]*_coeff[a]*sj[2];
-            dspinyy[ai-jj*f+jnum*f] += yprod*dBbsy[a2]*_coeff[a]*sj[1];
-            dspinyz[ai-jj*f+jnum*f] += yprod*dBbsy[a2]*_coeff[a]*sj[2];
-            dspinzz[ai-jj*f+jnum*f] += yprod*dBbsz[a2]*_coeff[a]*sj[2];
             yprod *= y4[M[a2+1]];
             ai++;
           }
@@ -526,9 +480,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
           if (atomtypes[1] != nelements && atomtypes[1] != jtype) {
             continue;
           }
-          j = jl[jj];
-          double *sj = sim->s[j];
-          double sp = si[0]*sj[0]+si[1]*sj[1]+si[2]*sj[2];
           double *y3 = &expr[jj][p+3];
           double *y4 = &expr[jj][p];
           ai = n;
@@ -538,25 +489,13 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
           }
           ai = n*(mb)+a+count+jj*f;
           for (a2=a;a2<mb;a2++) {
-            B1 = Bgs[a2]*_coeff[a2]*yprod*sp;
+            B1 = Bg[a2]*_coeff[a2]*yprod;
             dBbx = -B1*(y1*y4[0]+y3[0]-_coeffx[a2]*y3[1]+a2*y3[2]);
             dBby = -B1*(y1*y4[1]+y3[3]-_coeffy[a2]*y3[4]+a2*y3[5]);
             dBbz = -B1*(y1*y4[2]+y3[6]-_coeffz[a2]*y3[7]+a2*y3[8]);
             dfeaturesx[ai] += dBbx;
             dfeaturesy[ai] += dBby;
             dfeaturesz[ai] += dBbz;
-            dspinx[ai] += Bgs[a2]*yprod*_coeff[a2]*si[0];
-            dspiny[ai] += Bgs[a2]*yprod*_coeff[a2]*si[1];
-            dspinz[ai] += Bgs[a2]*yprod*_coeff[a2]*si[2];
-            dspinx[ai-jj*f+jnum*f] += yprod*Bgs[a2]*_coeff[a2]*sj[0];
-            dspiny[ai-jj*f+jnum*f] += yprod*Bgs[a2]*_coeff[a2]*sj[1];
-            dspinz[ai-jj*f+jnum*f] += yprod*Bgs[a2]*_coeff[a2]*sj[2];
-            dspinxx[ai-jj*f+jnum*f] += yprod*dBgsx[a2]*_coeff[a]*sj[0];
-            dspinxy[ai-jj*f+jnum*f] += yprod*dBgsx[a2]*_coeff[a]*sj[1];
-            dspinxz[ai-jj*f+jnum*f] += yprod*dBgsx[a2]*_coeff[a]*sj[2];
-            dspinyy[ai-jj*f+jnum*f] += yprod*dBgsy[a2]*_coeff[a]*sj[1];
-            dspinyz[ai-jj*f+jnum*f] += yprod*dBgsy[a2]*_coeff[a]*sj[2];
-            dspinzz[ai-jj*f+jnum*f] += yprod*dBgsz[a2]*_coeff[a]*sj[2];
             yprod *= y4[M[a2+1]];
             ai++;
           }
@@ -564,7 +503,7 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
         //central atom derivative
         for (a2=a;a2<mb;a2++) {
           ai = n*(mb)+a2+count+jnum*f;
-          features[ai-jnum*f] += Bbs[a2]*Bgs[a2]*_coeff[a2];
+          features[ai-jnum*f] += Bb[a2]*Bg[a2]*_coeff[a2];
         }
       }
       else{//Bb=Bg
@@ -576,9 +515,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
           if (atomtypes[1] != nelements && atomtypes[1] != jtype) {
             continue;
           }
-          j = jl[jj];
-          double *sj = sim->s[j];
-          double sp = si[0]*sj[0]+si[1]*sj[1]+si[2]*sj[2];
           double *y3 = &expr[jj][p+3];
           double *y4 = &expr[jj][p];
           ai = n;
@@ -588,34 +524,13 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
           }
           ai = n*(mb)+a+count+jj*f;
           for (a2=a;a2<mb;a2++) {
-            B1 = 2*Bbs[a2]*_coeff[a2]*yprod*sp;
+            B1 = 2*Bb[a2]*_coeff[a2]*yprod;
             dBbx = -B1*(y1*y4[0]+y3[0]-_coeffx[a2]*y3[1]+a2*y3[2]);
             dBby = -B1*(y1*y4[1]+y3[3]-_coeffy[a2]*y3[4]+a2*y3[5]);
             dBbz = -B1*(y1*y4[2]+y3[6]-_coeffz[a2]*y3[7]+a2*y3[8]);
             dfeaturesx[ai] += dBbx;
             dfeaturesy[ai] += dBby;
             dfeaturesz[ai] += dBbz;
-            dspinx[ai] += 2*Bbs[a2]*yprod*_coeff[a2]*si[0];
-            dspiny[ai] += 2*Bbs[a2]*yprod*_coeff[a2]*si[1];
-            dspinz[ai] += 2*Bbs[a2]*yprod*_coeff[a2]*si[2];
-            dspinx[ai-jj*f+jnum*f] += 2*yprod*Bbs[a2]*_coeff[a2]*sj[0];
-            dspiny[ai-jj*f+jnum*f] += 2*yprod*Bbs[a2]*_coeff[a2]*sj[1];
-            dspinz[ai-jj*f+jnum*f] += 2*yprod*Bbs[a2]*_coeff[a2]*sj[2];
-            dspinxx[ai] += 2*yprod*yprod*_coeff[a2]*si[0]*si[0];
-            dspinxy[ai] += 2*yprod*yprod*_coeff[a2]*si[0]*si[1];
-            dspinxz[ai] += 2*yprod*yprod*_coeff[a2]*si[0]*si[2];
-            dspinyy[ai] += 2*yprod*yprod*_coeff[a2]*si[1]*si[1];
-            dspinyz[ai] += 2*yprod*yprod*_coeff[a2]*si[1]*si[2];
-            dspinxx[ai] += 2*yprod*yprod*_coeff[a2]*si[2]*si[2];
-            dspinx[ai-jj*f+jnum*f] += 2*yprod*Bbs[a2]*_coeff[a2]*sj[0];
-            dspiny[ai-jj*f+jnum*f] += 2*yprod*Bbs[a2]*_coeff[a2]*sj[1];
-            dspinz[ai-jj*f+jnum*f] += 2*yprod*Bbs[a2]*_coeff[a2]*sj[2];
-            dspinxx[ai-jj*f+jnum*f] += yprod*dBbsx[a2]*_coeff[a]*sj[0];
-            dspinxy[ai-jj*f+jnum*f] += yprod*dBbsx[a2]*_coeff[a]*sj[1];
-            dspinxz[ai-jj*f+jnum*f] += yprod*dBbsx[a2]*_coeff[a]*sj[2];
-            dspinyy[ai-jj*f+jnum*f] += yprod*dBbsy[a2]*_coeff[a]*sj[1];
-            dspinyz[ai-jj*f+jnum*f] += yprod*dBbsy[a2]*_coeff[a]*sj[2];
-            dspinzz[ai-jj*f+jnum*f] += yprod*dBbsz[a2]*_coeff[a]*sj[2];
             yprod *= y4[M[a2+1]];
             ai++;
           }
@@ -623,7 +538,7 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
         //central atom derivative
         for (a2=a;a2<mb;a2++) {
           ai = n*(mb)+a2+count+jnum*f;
-          features[ai-jnum*f] += Bbs[a2]*Bbs[a2]*_coeff[a2];
+          features[ai-jnum*f] += Bb[a2]*Bb[a2]*_coeff[a2];
         }
       }
     }
@@ -643,10 +558,10 @@ void Fingerprint_bondspin::do3bodyfeatureset_singleneighborloop(double * feature
 }
 
 //Called by do3bodyfeatureset. Algorithm for low neighbor numbers and large series of bond angle powers
-void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,double * dspinx,double *dspiny,double *dspinz,double *dspinxx,double *dspinxy,double *dspinxz,double *dspinyy,double *dspinyz,double *dspinzz,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int *jl) {
-  int i,j,jj,itype,jtype,ktype,kk,m,n;
+  int *ilist,*jlist,*numneigh,**firstneigh;
+void Fingerprint_bond::do3bodyfeatureset_doubleneighborloop(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,int ii, int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/) {
+  int i,jj,itype,jtype,ktype,kk,m,n;
   double delx,dely,delz,rsq;
-  int *ilist;
   int jtypes = atomtypes[1];
   int ktypes = atomtypes[2];
   int count=0;
@@ -670,12 +585,11 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
   double c51[kmax];
   double c61[kmax];
   double ct[kmax];
-  double *si = sim->s[i];
   for (jj = 0; jj < jnum; jj++) {
     jtype = tn[jj];
     if (jtypes != nelements && jtypes != jtype && ktypes != nelements && ktypes != jtype) {
-        expr[jj][0]=0;
-        continue;
+      expr[jj][0]=0;
+      continue;
     }
     delx = xn[jj];
     dely = yn[jj];
@@ -710,9 +624,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
     if (jtypes != nelements && jtypes != jtype) {
       continue;
     }
-    j = jl[jj];
-    double *sj = sim->s[j];
-    double spj = si[0]*sj[0]+si[1]*sj[1]+si[2]*sj[2];
     for (n = 0;n<kmax;n++) {
       ct[n] = 2*alpha_k[n]/re;
       c41[n]=(-ct[n]+2*dfc[jj])*y[jj][0];
@@ -726,9 +637,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
         if (ktypes != nelements && ktypes != ktype) {
           continue;
         }
-        j = jl[kk];
-        double *sk = sim->s[j];
-        double spk = si[0]*sk[0]+si[1]*sk[1]+si[2]*sk[2];
         count = startingneuron;
         double dot = (y[jj][0]*y[kk][0]+y[jj][1]*y[kk][1]+y[jj][2]*y[kk][2]);
         double c1  = 2*ri[jj]*(y[kk][0]-dot*y[jj][0]);
@@ -737,6 +645,13 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
         double c10 = 2*ri[kk]*(y[jj][0]-dot*y[kk][0]);
         double c11 = 2*ri[kk]*(y[jj][1]-dot*y[kk][1]);
         double c12 = 2*ri[kk]*(y[jj][2]-dot*y[kk][2]);
+        //alternate formulation:
+//        double c1 = 2*ri[jj]*y[kk][0]*(1-y[jj][0]*y[jj][0]);
+//        double c2 = 2*ri[jj]*y[kk][1]*(1-y[jj][1]*y[jj][1]);
+//        double c3 = 2*ri[jj]*y[kk][2]*(1-y[jj][2]*y[jj][2]);
+//        double c10 = 2*ri[kk]*y[jj][0]*(1-y[kk][0]*y[kk][0]);
+//        double c11 = 2*ri[kk]*y[jj][1]*(1-y[kk][1]*y[kk][1]);
+//        double c12 = 2*ri[kk]*y[jj][2]*(1-y[kk][2]*y[kk][2]);
         for (n=0;n<kb;n++) {
           double dot1=expr[jj][n]*expr[kk][n];
           double c4 = c41[n];
@@ -747,34 +662,13 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
           double c52 = ct2*y[kk][1];
           double c62 = ct2*y[kk][2];
           //m=0
-          dspinx[jj*f+count] += 2*dot1*si[0]*spk;
-          dspiny[jj*f+count] += 2*dot1*si[1]*spk;
-          dspinz[jj*f+count] += 2*dot1*si[2]*spk;
-          dspinx[kk*f+count] += 2*dot1*si[0]*spj;
-          dspiny[kk*f+count] += 2*dot1*si[1]*spj;
-          dspinz[kk*f+count] += 2*dot1*si[2]*spj;
-          dspinx[jnum*f+count] += 2*dot1*(sj[0]*spk+sk[0]*spj);
-          dspiny[jnum*f+count] += 2*dot1*(sj[1]*spk+sk[1]*spj);
-          dspinz[jnum*f+count] += 2*dot1*(sj[2]*spk+sk[2]*spj);
-          dspinxx[jj*f+count] += 2*dot1*si[0]*si[0];
-          dspinxy[jj*f+count] += 2*dot1*si[0]*si[1];
-          dspinxz[jj*f+count] += 2*dot1*si[0]*si[2];
-          dspinyy[jj*f+count] += 2*dot1*si[1]*si[1];
-          dspinyz[jj*f+count] += 2*dot1*si[1]*si[2];
-          dspinzz[jj*f+count] += 2*dot1*si[2]*si[2];
-          dspinxx[jnum*f+count] += 2*dot1*2*sj[0]*sk[0];
-          dspinxy[jnum*f+count] += 2*dot1*(sj[0]*sk[1]+sj[1]*sk[0]);
-          dspinxz[jnum*f+count] += 2*dot1*(sj[0]*sk[2]+sj[2]*sk[0]);
-          dspinyy[jnum*f+count] += 2*dot1*2*sj[1]*sk[1];
-          dspinyz[jnum*f+count] += 2*dot1*(sj[1]*sk[2]+sj[2]*sk[1]);
-          dspinzz[jnum*f+count] += 2*dot1*2*sj[2]*sk[2];
-          features[count]+=2*dot1*spj*spk;
-          dfeaturesx[jj*f+count]+=dot1*c4*spj*spk;
-          dfeaturesy[jj*f+count]+=dot1*c5*spj*spk;
-          dfeaturesz[jj*f+count]+=dot1*c6*spj*spk;
-          dfeaturesx[kk*f+count]+=dot1*c42*spj*spk;
-          dfeaturesy[kk*f+count]+=dot1*c52*spj*spk;
-          dfeaturesz[kk*f+count]+=dot1*c62*spj*spk;
+          features[count]+=2*dot1;
+          dfeaturesx[jj*f+count]+=dot1*c4;
+          dfeaturesy[jj*f+count]+=dot1*c5;
+          dfeaturesz[jj*f+count]+=dot1*c6;
+          dfeaturesx[kk*f+count]+=dot1*c42;
+          dfeaturesy[kk*f+count]+=dot1*c52;
+          dfeaturesz[kk*f+count]+=dot1*c62;
           c4*=dot;
           c5*=dot;
           c6*=dot;
@@ -786,35 +680,14 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
             double c7 = dot1*(m*c1+c4);
             double c8 = dot1*(m*c2+c5);
             double c9 = dot1*(m*c3+c6);
-            dfeaturesx[jj*f+count]+=c7*spj*spk;
-            dfeaturesy[jj*f+count]+=c8*spj*spk;
-            dfeaturesz[jj*f+count]+=c9*spj*spk;
-            dfeaturesx[kk*f+count]+=dot1*(m*c10+c42)*spj*spk;
-            dfeaturesy[kk*f+count]+=dot1*(m*c11+c52)*spj*spk;
-            dfeaturesz[kk*f+count]+=dot1*(m*c12+c62)*spj*spk;
+            dfeaturesx[jj*f+count]+=c7;
+            dfeaturesy[jj*f+count]+=c8;
+            dfeaturesz[jj*f+count]+=c9;
+            dfeaturesx[kk*f+count]+=dot1*(m*c10+c42);
+            dfeaturesy[kk*f+count]+=dot1*(m*c11+c52);
+            dfeaturesz[kk*f+count]+=dot1*(m*c12+c62);
             dot1*=dot;
-            dspinx[jj*f+count] += 2*dot1*si[0]*spk;
-            dspiny[jj*f+count] += 2*dot1*si[1]*spk;
-            dspinz[jj*f+count] += 2*dot1*si[2]*spk;
-            dspinx[kk*f+count] += 2*dot1*si[0]*spj;
-            dspiny[kk*f+count] += 2*dot1*si[1]*spj;
-            dspinz[kk*f+count] += 2*dot1*si[2]*spj;
-            dspinx[jnum*f+count] += 2*dot1*(sj[0]*spk+sk[0]*spj);
-            dspiny[jnum*f+count] += 2*dot1*(sj[1]*spk+sk[1]*spj);
-            dspinz[jnum*f+count] += 2*dot1*(sj[2]*spk+sk[2]*spj);
-            dspinxx[jj*f+count] += 2*dot1*si[0]*si[0];
-            dspinxy[jj*f+count] += 2*dot1*si[0]*si[1];
-            dspinxz[jj*f+count] += 2*dot1*si[0]*si[2];
-            dspinyy[jj*f+count] += 2*dot1*si[1]*si[1];
-            dspinyz[jj*f+count] += 2*dot1*si[1]*si[2];
-            dspinzz[jj*f+count] += 2*dot1*si[2]*si[2];
-            dspinxx[jnum*f+count] += 2*dot1*2*sj[0]*sk[0];
-            dspinxy[jnum*f+count] += 2*dot1*(sj[0]*sk[1]+sj[1]*sk[0]);
-            dspinxz[jnum*f+count] += 2*dot1*(sj[0]*sk[2]+sj[2]*sk[0]);
-            dspinyy[jnum*f+count] += 2*dot1*2*sj[1]*sk[1];
-            dspinyz[jnum*f+count] += 2*dot1*(sj[1]*sk[2]+sj[2]*sk[1]);
-            dspinzz[jnum*f+count] += 2*dot1*2*sj[2]*sk[2];
-            features[count++]+=2*dot1*spj*spk;
+            features[count++]+=2*dot1;
           }
         }
       }
@@ -825,34 +698,20 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
         double c1 = 2*ri[jj]*(y[kk][0]-dot*y[jj][0]);
         double c2 = 2*ri[jj]*(y[kk][1]-dot*y[jj][1]);
         double c3 = 2*ri[jj]*(y[kk][2]-dot*y[jj][2]);
+        //alternate formulation:
+//        double c1 = 2*ri[jj]*y[kk][0]*(1-y[jj][0]*y[jj][0]);
+//        double c2 = 2*ri[jj]*y[kk][1]*(1-y[jj][1]*y[jj][1]);
+//        double c3 = 2*ri[jj]*y[kk][2]*(1-y[jj][2]*y[jj][2]);
         for (n=0;n<kb;n++) {
           double dot1=expr[jj][n]*expr[kk][n];
           double c4 = c41[n];
           double c5 = c51[n];
           double c6 = c61[n];
           //m=0
-          features[count]+=dot1*spj*spj;
-          dspinx[jj*f+count] += 2*dot1*si[0]*spj;
-          dspiny[jj*f+count] += 2*dot1*si[1]*spj;
-          dspinz[jj*f+count] += 2*dot1*si[2]*spj;
-          dspinx[jnum*f+count] += 2*dot1*sj[0]*spj;
-          dspiny[jnum*f+count] += 2*dot1*sj[1]*spj;
-          dspinz[jnum*f+count] += 2*dot1*sj[2]*spj;
-          dspinxx[jj*f+count] += 2*dot1*si[0]*si[0];
-          dspinxy[jj*f+count] += 2*dot1*si[0]*si[1];
-          dspinxz[jj*f+count] += 2*dot1*si[0]*si[2];
-          dspinyy[jj*f+count] += 2*dot1*si[1]*si[1];
-          dspinyz[jj*f+count] += 2*dot1*si[1]*si[2];
-          dspinzz[jj*f+count] += 2*dot1*si[2]*si[2];
-          dspinxx[jnum*f+count] += 2*dot1*2*sj[0]*sj[0];
-          dspinxy[jnum*f+count] += 2*dot1*(sj[0]*sj[1]+sj[1]*sj[0]);
-          dspinxz[jnum*f+count] += 2*dot1*(sj[0]*sj[2]+sj[2]*sj[0]);
-          dspinyy[jnum*f+count] += 2*dot1*2*sj[1]*sj[1];
-          dspinyz[jnum*f+count] += 2*dot1*(sj[1]*sj[2]+sj[2]*sj[1]);
-          dspinzz[jnum*f+count] += 2*dot1*2*sj[2]*sj[2];
-          dfeaturesx[jj*f+count]+=dot1*c4*spj*spj;
-          dfeaturesy[jj*f+count]+=dot1*c5*spj*spj;
-          dfeaturesz[jj*f+count]+=dot1*c6*spj*spj;
+          features[count]+=dot1;
+          dfeaturesx[jj*f+count]+=dot1*c4;
+          dfeaturesy[jj*f+count]+=dot1*c5;
+          dfeaturesz[jj*f+count]+=dot1*c6;
           c4*=dot;
           c5*=dot;
           c6*=dot;
@@ -861,29 +720,11 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
             double c7 = dot1*(m*c1+c4);
             double c8 = dot1*(m*c2+c5);
             double c9 = dot1*(m*c3+c6);
-            dfeaturesx[jj*f+count]+=c7*spj*spj;
-            dfeaturesy[jj*f+count]+=c8*spj*spj;
-            dfeaturesz[jj*f+count]+=c9*spj*spj;
+            dfeaturesx[jj*f+count]+=c7;
+            dfeaturesy[jj*f+count]+=c8;
+            dfeaturesz[jj*f+count]+=c9;
             dot1*=dot;
-            dspinx[jj*f+count] += 2*dot1*si[0]*spj;
-            dspiny[jj*f+count] += 2*dot1*si[1]*spj;
-            dspinz[jj*f+count] += 2*dot1*si[2]*spj;
-            dspinx[jnum*f+count] += 2*dot1*sj[0]*spj;
-            dspiny[jnum*f+count] += 2*dot1*sj[1]*spj;
-            dspinz[jnum*f+count] += 2*dot1*sj[2]*spj;
-            dspinxx[jj*f+count] += 2*dot1*si[0]*si[0];
-            dspinxy[jj*f+count] += 2*dot1*si[0]*si[1];
-            dspinxz[jj*f+count] += 2*dot1*si[0]*si[2];
-            dspinyy[jj*f+count] += 2*dot1*si[1]*si[1];
-            dspinyz[jj*f+count] += 2*dot1*si[1]*si[2];
-            dspinzz[jj*f+count] += 2*dot1*si[2]*si[2];
-            dspinxx[jnum*f+count] += 2*dot1*2*sj[0]*sj[0];
-            dspinxy[jnum*f+count] += 2*dot1*(sj[0]*sj[1]+sj[1]*sj[0]);
-            dspinxz[jnum*f+count] += 2*dot1*(sj[0]*sj[2]+sj[2]*sj[0]);
-            dspinyy[jnum*f+count] += 2*dot1*2*sj[1]*sj[1];
-            dspinyz[jnum*f+count] += 2*dot1*(sj[1]*sj[2]+sj[2]*sj[1]);
-            dspinzz[jnum*f+count] += 2*dot1*2*sj[2]*sj[2];
-            features[count++]+=dot1*spj*spj;
+            features[count++]+=dot1;
           }
         }
       }
@@ -895,9 +736,6 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
         if (ktypes != nelements && ktypes != ktype) {
           continue;
         }
-        j = jl[kk];
-        double *sk = sim->s[j];
-        double spk = si[0]*sk[0]+si[1]*sk[1]+si[2]*sk[2];
         count = startingneuron;
         double dot = (y[jj][0]*y[kk][0]+y[jj][1]*y[kk][1]+y[jj][2]*y[kk][2]);
         double c1  = ri[jj]*(y[kk][0]-dot*y[jj][0]);
@@ -906,6 +744,13 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
         double c10 = ri[kk]*(y[jj][0]-dot*y[kk][0]);
         double c11 = ri[kk]*(y[jj][1]-dot*y[kk][1]);
         double c12 = ri[kk]*(y[jj][2]-dot*y[kk][2]);
+        //alternate formulation:
+//        double c1 = 2*ri[jj]*y[kk][0]*(1-y[jj][0]*y[jj][0]);
+//        double c2 = 2*ri[jj]*y[kk][1]*(1-y[jj][1]*y[jj][1]);
+//        double c3 = 2*ri[jj]*y[kk][2]*(1-y[jj][2]*y[jj][2]);
+//        double c10 = 2*ri[kk]*y[jj][0]*(1-y[kk][0]*y[kk][0]);
+//        double c11 = 2*ri[kk]*y[jj][1]*(1-y[kk][1]*y[kk][1]);
+//        double c12 = 2*ri[kk]*y[jj][2]*(1-y[kk][2]*y[kk][2]);
         for (n=0;n<kb;n++) {
           double dot1=expr[jj][n]*expr[kk][n];
           double c4 = c41[n]/2;
@@ -916,34 +761,13 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
           double c52 = ct2*y[kk][1];
           double c62 = ct2*y[kk][2];
           //m=0
-          features[count]+=dot1*spj*spk;
-          dspinx[jj*f+count] += dot1*si[0]*spk;
-          dspiny[jj*f+count] += dot1*si[1]*spk;
-          dspinz[jj*f+count] += dot1*si[2]*spk;
-          dspinx[kk*f+count] += dot1*si[0]*spj;
-          dspiny[kk*f+count] += dot1*si[1]*spj;
-          dspinz[kk*f+count] += dot1*si[2]*spj;
-          dspinx[jnum*f+count] += dot1*(sj[0]*spk+sk[0]*spj);
-          dspiny[jnum*f+count] += dot1*(sj[1]*spk+sk[1]*spj);
-          dspinz[jnum*f+count] += dot1*(sj[2]*spk+sk[2]*spj);
-          dspinxx[jj*f+count] += dot1*si[0]*si[0];
-          dspinxy[jj*f+count] += dot1*si[0]*si[1];
-          dspinxz[jj*f+count] += dot1*si[0]*si[2];
-          dspinyy[jj*f+count] += dot1*si[1]*si[1];
-          dspinyz[jj*f+count] += dot1*si[1]*si[2];
-          dspinzz[jj*f+count] += dot1*si[2]*si[2];
-          dspinxx[jnum*f+count] += dot1*2*sj[0]*sk[0];
-          dspinxy[jnum*f+count] += dot1*(sj[0]*sk[1]+sj[1]*sk[0]);
-          dspinxz[jnum*f+count] += dot1*(sj[0]*sk[2]+sj[2]*sk[0]);
-          dspinyy[jnum*f+count] += dot1*2*sj[1]*sk[1];
-          dspinyz[jnum*f+count] += dot1*(sj[1]*sk[2]+sj[2]*sk[1]);
-          dspinzz[jnum*f+count] += dot1*2*sj[2]*sk[2];
-          dfeaturesx[jj*f+count]+=dot1*c4*spj*spk;
-          dfeaturesy[jj*f+count]+=dot1*c5*spj*spk;
-          dfeaturesz[jj*f+count]+=dot1*c6*spj*spk;
-          dfeaturesx[kk*f+count]+=dot1*c42*spj*spk;
-          dfeaturesy[kk*f+count]+=dot1*c52*spj*spk;
-          dfeaturesz[kk*f+count]+=dot1*c62*spj*spk;
+          features[count]+=dot1;
+          dfeaturesx[jj*f+count]+=dot1*c4;
+          dfeaturesy[jj*f+count]+=dot1*c5;
+          dfeaturesz[jj*f+count]+=dot1*c6;
+          dfeaturesx[kk*f+count]+=dot1*c42;
+          dfeaturesy[kk*f+count]+=dot1*c52;
+          dfeaturesz[kk*f+count]+=dot1*c62;
           c4*=dot;
           c5*=dot;
           c6*=dot;
@@ -955,35 +779,14 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
             double c7 = dot1*(m*c1+c4);
             double c8 = dot1*(m*c2+c5);
             double c9 = dot1*(m*c3+c6);
-            dfeaturesx[jj*f+count]+=c7*spj*spk;
-            dfeaturesy[jj*f+count]+=c8*spj*spk;
-            dfeaturesz[jj*f+count]+=c9*spj*spk;
-            dfeaturesx[kk*f+count]+=dot1*(m*c10+c42)*spj*spk;
-            dfeaturesy[kk*f+count]+=dot1*(m*c11+c52)*spj*spk;
-            dfeaturesz[kk*f+count]+=dot1*(m*c12+c62)*spj*spk;
+            dfeaturesx[jj*f+count]+=c7;
+            dfeaturesy[jj*f+count]+=c8;
+            dfeaturesz[jj*f+count]+=c9;
+            dfeaturesx[kk*f+count]+=dot1*(m*c10+c42);
+            dfeaturesy[kk*f+count]+=dot1*(m*c11+c52);
+            dfeaturesz[kk*f+count]+=dot1*(m*c12+c62);
             dot1*=dot;
-            dspinx[jj*f+count] += dot1*si[0]*spk;
-            dspiny[jj*f+count] += dot1*si[1]*spk;
-            dspinz[jj*f+count] += dot1*si[2]*spk;
-            dspinx[kk*f+count] += dot1*si[0]*spj;
-            dspiny[kk*f+count] += dot1*si[1]*spj;
-            dspinz[kk*f+count] += dot1*si[2]*spj;
-            dspinx[jnum*f+count] += dot1*(sj[0]*spk+sk[0]*spj);
-            dspiny[jnum*f+count] += dot1*(sj[1]*spk+sk[1]*spj);
-            dspinz[jnum*f+count] += dot1*(sj[2]*spk+sk[2]*spj);
-            dspinxx[jj*f+count] += dot1*si[0]*si[0];
-            dspinxy[jj*f+count] += dot1*si[0]*si[1];
-            dspinxz[jj*f+count] += dot1*si[0]*si[2];
-            dspinyy[jj*f+count] += dot1*si[1]*si[1];
-            dspinyz[jj*f+count] += dot1*si[1]*si[2];
-            dspinzz[jj*f+count] += dot1*si[2]*si[2];
-            dspinxx[jnum*f+count] += dot1*2*sj[0]*sk[0];
-            dspinxy[jnum*f+count] += dot1*(sj[0]*sk[1]+sj[1]*sk[0]);
-            dspinxz[jnum*f+count] += dot1*(sj[0]*sk[2]+sj[2]*sk[0]);
-            dspinyy[jnum*f+count] += dot1*2*sj[1]*sk[1];
-            dspinyz[jnum*f+count] += dot1*(sj[1]*sk[2]+sj[2]*sk[1]);
-            dspinzz[jnum*f+count] += dot1*2*sj[2]*sk[2];
-            features[count++]+=dot1*spj*spk;
+            features[count++]+=dot1;
           }
         }
       }
@@ -1002,4 +805,5 @@ void Fingerprint_bondspin::do3bodyfeatureset_doubleneighborloop(double * feature
     }
   }
 }
+
 

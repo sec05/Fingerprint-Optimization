@@ -3,7 +3,7 @@
 #define LMP_RANN_STATE_ESHIFT_H
 
 #include "rann_stateequation.h"
-#include "pair_spin_rann.h"
+#include "../pair_spin_rann.h"
 
 namespace LAMMPS_NS {
 namespace RANN {

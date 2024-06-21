@@ -28,15 +28,14 @@ do not necessarily reflect the views of the United States Army.​”
 
 DISTRIBUTION A. Approved for public release; distribution unlimited. OPSEC#4918
  */
-
-#include "rann_fingerprint_radialscreened.h"
-#include "pair_spin_rann.h"
+#include "rann_fingerprint_radialscreenedspin.h"
+#include "../pair_spin_rann.h"
 
 #include <cmath>
 
 using namespace LAMMPS_NS::RANN;
 
-Fingerprint_radialscreened::Fingerprint_radialscreened(PairRANN *_pair) : Fingerprint(_pair)
+Fingerprint_radialscreenedspin::Fingerprint_radialscreenedspin(PairRANN *_pair) : Fingerprint(_pair)
 {
   n_body_type = 2;
   dr = 0;
@@ -47,15 +46,17 @@ Fingerprint_radialscreened::Fingerprint_radialscreened(PairRANN *_pair) : Finger
   nmax = 0;
   omin = 0;
   id = -1;
-  style = "radialscreened";
+  style = "radialscreenedspin";
   atomtypes = new int[n_body_type];
   empty = true;
   fullydefined = false;
   _pair->doscreen = true;
   screen = true;
+  _pair->dospin = true;
+  spin = true;
 }
 
-Fingerprint_radialscreened::~Fingerprint_radialscreened()
+Fingerprint_radialscreenedspin::~Fingerprint_radialscreenedspin()
 {
   delete[] atomtypes;
   delete[] radialtable;
@@ -64,7 +65,7 @@ Fingerprint_radialscreened::~Fingerprint_radialscreened()
   delete[] rinvsqrttable;
 }
 
-bool Fingerprint_radialscreened::parse_values(std::string constant,std::vector<std::string> line1) {
+bool Fingerprint_radialscreenedspin::parse_values(std::string constant,std::vector<std::string> line1) {
   int l;
   int nwords=line1.size();
   if (constant.compare("re")==0) {
@@ -95,7 +96,7 @@ bool Fingerprint_radialscreened::parse_values(std::string constant,std::vector<s
   return false;
 }
 
-void Fingerprint_radialscreened::write_values(FILE *fid) {
+void Fingerprint_radialscreenedspin::write_values(FILE *fid) {
   int i;
   fprintf(fid,"fingerprintconstants:");
   fprintf(fid,"%s",pair->elementsp[atomtypes[0]]);
@@ -145,7 +146,7 @@ void Fingerprint_radialscreened::write_values(FILE *fid) {
 }
 
 //called after fingerprint is fully defined and tables can be computed.
-void Fingerprint_radialscreened::allocate()
+void Fingerprint_radialscreenedspin::allocate()
 {
   int k,m;
   double r1;
@@ -170,21 +171,20 @@ void Fingerprint_radialscreened::allocate()
 }
 
 //called after fingerprint is declared for i-j type, but before its parameters are read.
-void Fingerprint_radialscreened::init(int *i,int _id)
+void Fingerprint_radialscreenedspin::init(int *i,int _id)
 {
   empty = false;
   for (int j=0;j<n_body_type;j++) {atomtypes[j] = i[j];}
   id = _id;
 }
 
-void Fingerprint_radialscreened::compute_fingerprint(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,double *Sik, double *dSikx, double*dSiky, double *dSikz, double *dSijkx, double *dSijky, double *dSijkz, bool *Bij,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/)
+void Fingerprint_radialscreenedspin::compute_fingerprint(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,double * dspinx,double *dspiny,double *dspinz,double *dspinxx,double *dspinxy,double *dspinxz,double *dspinyy,double *dspinyz,double *dspinzz,double *Sik, double *dSikx, double*dSiky, double *dSikz, double *dSijkx, double *dSijky, double *dSijkz, bool *Bij,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int *jl)
 {
     int nelements = pair->nelements;
     int res = pair->res;
-    int i,jj,itype,jtype,l,kk;
+    int i,j,jj,itype,jtype,l,kk;
     double delx,dely,delz,rsq;
     int *ilist;
-    //
     PairRANN::Simulation *sim = &pair->sims[sid];
     int count=0;
     int *type = sim->type;
@@ -194,11 +194,11 @@ void Fingerprint_radialscreened::compute_fingerprint(double * features,double * 
     itype = pair->map[type[i]];
     int f = pair->net[itype].dimensions[0];
     double cutinv2 = 1/cutmax/cutmax;
+    double *si = sim->s[i];
     //loop over neighbors
     for (jj = 0; jj < jnum; jj++) {
-      //if (Bij[jj]==false) {continue;}
+      if (Bij[jj]==false) {continue;}
       jtype = tn[jj];
-      //if (jj==21 && ii == 231 && atomtypes[1] == 1 && atomtypes[0]==1){printf("got here\n");}
       if (atomtypes[1] != nelements && atomtypes[1] != jtype)continue;
       delx = xn[jj];
       dely = yn[jj];
@@ -210,6 +210,9 @@ void Fingerprint_radialscreened::compute_fingerprint(double * features,double * 
       int m1 = (int)r1;
       if (m1>res || m1<1) {pair->errorf(FLERR,"invalid neighbor radius!");}
       if (radialtable[m1]==0) {continue;}
+      j=jl[jj];
+      double *sj = sim->s[j];
+      double sp = si[0]*sj[0]+si[1]*sj[1]+si[2]*sj[2];
       //cubic interpolation from tables
       double *p1 = &radialtable[m1*(nmax-omin+1)];
       double *p2 = &radialtable[(m1+1)*(nmax-omin+1)];
@@ -222,14 +225,21 @@ void Fingerprint_radialscreened::compute_fingerprint(double * features,double * 
       double ri = rinvs[1] + 0.5 * r1*(rinvs[2] - rinvs[0] + r1*(2.0*rinvs[0] - 5.0*rinvs[1] + 4.0*rinvs[2] - rinvs[3] + r1*(3.0*(rinvs[1] - rinvs[2]) + rinvs[3] - rinvs[0])));
       for (l=0;l<=(nmax-omin);l++) {
         double rt = Sik[jj]*(p1[l]+0.5*r1*(p2[l]-p0[l]+r1*(2.0*p0[l]-5.0*p1[l]+4.0*p2[l]-p3[l]+r1*(3.0*(p1[l]-p2[l])+p3[l]-p0[l]))));
+        //update neighbor's features
+        dspinx[jj*f+count]+=rt*si[0];
+        dspiny[jj*f+count]+=rt*si[1];
+        dspinz[jj*f+count]+=rt*si[2];
+        dspinx[jnum*f+count]+=rt*sj[0];
+        dspiny[jnum*f+count]+=rt*sj[1];
+        dspinz[jnum*f+count]+=rt*sj[2];
+        rt *= sp;
         features[count]+=rt;
         double rt1 = rt*((l+omin)/rsq+(-alpha[l]/re+dfc)*ri);
-        //update neighbor's features
         dfeaturesx[jj*f+count]+=rt1*delx+rt*dSikx[jj];
         dfeaturesy[jj*f+count]+=rt1*dely+rt*dSiky[jj];
         dfeaturesz[jj*f+count]+=rt1*delz+rt*dSikz[jj];
         for (kk=0;kk<jnum;kk++) {
-          //if (Bij[kk]==false) {continue;}
+          if (Bij[kk]==false) {continue;}
           dfeaturesx[kk*f+count]+=rt*dSijkx[jj*jnum+kk];
           dfeaturesy[kk*f+count]+=rt*dSijky[jj*jnum+kk];
           dfeaturesz[kk*f+count]+=rt*dSijkz[jj*jnum+kk];
@@ -238,7 +248,7 @@ void Fingerprint_radialscreened::compute_fingerprint(double * features,double * 
       }
     }
     for (jj=0;jj<jnum;jj++) {
-      //if (Bij[jj]==false) {continue;}
+      if (Bij[jj]==false) {continue;}
       count = startingneuron;
       for (l=0;l<=(nmax-omin);l++) {
         dfeaturesx[jnum*f+count]-=dfeaturesx[jj*f+count];
@@ -249,7 +259,7 @@ void Fingerprint_radialscreened::compute_fingerprint(double * features,double * 
     }
   }
 
-int Fingerprint_radialscreened::get_length()
+int Fingerprint_radialscreenedspin::get_length()
 {
   return nmax-omin+1;
 }

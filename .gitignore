@@ -168,3 +168,7 @@ obj
 .vscode
 *.nn
 *.d
+*.matrix
+*.opt
+*.optv
+*.dump

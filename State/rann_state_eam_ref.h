@@ -39,7 +39,7 @@ DISTRIBUTION A. Approved for public release; distribution unlimited. OPSEC#4918
 #include <stdlib.h>
 #include <sstream>
 #include "rann_stateequation.h"
-#include "pair_spin_rann.h"
+#include "../pair_spin_rann.h"
 
 namespace LAMMPS_NS {
 namespace RANN {
