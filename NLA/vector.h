@@ -17,14 +17,22 @@ namespace NLA
 
         int dimension;
         double *components;
-
-        void scale(double);
-        void add(Vector*);
-        void subtract(Vector*);
+        
+        Vector& operator+(const Vector&);
+        Vector& operator-(const Vector&);
+        Vector& operator*(const double);
+        Matrix& operator*(const Vector&);
+        double& operator()(const int);
+        
         double dot(Vector*);
         void makeUnitVector();
-        NLA::Matrix* outerProduct(Vector*);
         void outputToFile(std::string);
+
+    private:
+        void scale(double);
+        void add(const Vector&);
+        void subtract(const Vector&);
+        NLA::Matrix& outerProduct(const Vector&);
     };
 }
 #endif

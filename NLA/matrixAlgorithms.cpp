@@ -1,9 +1,10 @@
 // This file contains algorithms to factorize matricies or solve linear systems
 #include "matrix.h"
 #include <string>
+#include <math.h>
 using namespace NLA;
 
-
+/*
 Matrix** Matrix::classicalGramSchmidt()
 {
     int m = rows;
@@ -48,7 +49,7 @@ Matrix** Matrix::classicalGramSchmidt()
 This function is an implementation of the modified Gram-Schmidt algorithm for QR decomposition.
 It takes in a matrix A and returns a matrix Q and a matrix R such that A = QR.
 It returns a pointer to an array of matrices where the first matrix is Q and the second matrix is R.
-*/
+
 Matrix** Matrix::modifiedGramSchmidt() // returning Q^T fix this
 {
 
@@ -88,7 +89,7 @@ Matrix** Matrix::modifiedGramSchmidt() // returning Q^T fix this
 /*
 This algorithm uses a series of householder reflectors to turn a symmetric matrix into a real
 tridiagonal one or a non symmetric into an upper hessenberg
-*/
+
 
 void Matrix::householderUpperHessenberg() {
     int m = rows;
@@ -151,4 +152,4 @@ void Matrix::householderUpperHessenberg() {
         delete prod;
         delete v_k;
     }
-}
+}*/

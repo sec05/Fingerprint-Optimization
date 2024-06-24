@@ -12,16 +12,14 @@ namespace NLA{
 
         int rows, columns;
         double** data;
-        
-        // matrix algorithms
-
 
         // arithemtic operations
-        void scale(double);
-        void add(Matrix*);
-        void subtract(Matrix*);
-        Matrix* multiply(Matrix*);
-        double frobeniusNorm();
+        Matrix& operator+(const Matrix&);
+        Matrix& operator-(const Matrix&);
+        Matrix& operator*(const double);
+        Matrix& operator*(const Matrix&);
+        Vector& operator*(const Vector&);
+        double& operator()(const int,const int);
 
         // munipulation algorithms
         void transpose();
@@ -35,9 +33,17 @@ namespace NLA{
         Matrix* copyMatrix();
 
         // math algorithms
-        Matrix **classicalGramSchmidt();
-        Matrix **modifiedGramSchmidt();
-        void householderUpperHessenberg();
+        //Matrix **classicalGramSchmidt();
+        //Matrix **modifiedGramSchmidt();
+       // void householderUpperHessenberg();
+        double frobeniusNorm();
+
+        private:
+        void scale(double);
+        void add(const Matrix&);
+        void subtract(const Matrix&);
+        Matrix& multiply(const Matrix&);
+        Vector& multiply(const Vector&);
     };
 }
 #endif

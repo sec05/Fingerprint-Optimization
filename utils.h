@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <sstream>
 #include <map>
+#include <vector>
 
 
 #ifndef UTILS_H_

@@ -103,9 +103,9 @@ void Matrix::scale(double n)
     }
 }
 
-void Matrix::add(Matrix *m)
+void Matrix::add(const Matrix& m)
 {
-    if (rows != m->rows || columns != m->columns)
+    if (rows != m.rows || columns != m.columns)
     {
         printf("Error: Cannot add matricies! Dimensions do not match!\n");
         return;
@@ -114,14 +114,19 @@ void Matrix::add(Matrix *m)
     {
         for (int j = 0; j < columns; j++)
         {
-            data[i][j] += m->data[i][j];
+            data[i][j] += m.data[i][j];
         }
     }
 }
 
-void Matrix::subtract(Matrix *m)
+Matrix& Matrix::operator+(const Matrix& A){
+   add(A);
+   return *this;
+}
+
+void Matrix::subtract(const Matrix& m)
 {
-    if (rows != m->rows || columns != m->columns)
+    if (rows != m.rows || columns != m.columns)
     {
         printf("Error: Cannot subtract matricies! Dimensions do not match!\n");
         return;
@@ -130,32 +135,72 @@ void Matrix::subtract(Matrix *m)
     {
         for (int j = 0; j < columns; j++)
         {
-            data[i][j] += m->data[i][j];
+            data[i][j] += m.data[i][j];
         }
     }
 }
 
-Matrix *Matrix::multiply(Matrix *m)
+Matrix& Matrix::operator-(const Matrix& A){
+    subtract(A);
+    return *this;
+}
+
+Matrix& Matrix::multiply(const Matrix& m)
 {
-    if (columns != m->rows)
+    if (columns != m.rows)
     {
-        printf("Error: Matrix dimensions do not match! Trying to multiply %d x %d with %d x %d!\n",rows,columns,m->rows,m->columns);
-        return NULL;
+       printf("Error: Matrix dimensions do not match!\n");
     }
-    Matrix *C = new Matrix(rows, m->columns);
+    Matrix *C = new Matrix(rows, m.columns);
     for (int i = 0; i < rows; i++)
     {
-        for (int j = 0; j < m->columns; j++)
+        for (int j = 0; j < m.columns; j++)
         {
             double sum = 0;
-            for (int k = 0; k < m->rows; k++)
+            for (int k = 0; k < m.rows; k++)
             {
-                sum += data[i][k] * m->data[k][j];
+                sum += data[i][k] * m.data[k][j];
             }
             C->data[i][j] = sum;
         }
     }
-    return C;
+    return *C;
+}
+
+Vector& Matrix::multiply(const Vector& v){
+    if(columns != v.dimension)
+    {
+        printf("Error: Matrix columns and vector dimension do not match!\n");
+
+    }
+    Vector* p = new Vector(columns);
+
+    for(int i = 0; i < rows; i++){
+        double sum = 0;
+        for(int j = 0; j < columns; j++){
+            sum += data[i][j] * v.components[j];
+        }
+        p->components[i] = sum;
+    }
+
+    return *p;
+}
+Matrix& Matrix::operator*(const double d){
+    scale(d);
+    return *this;
+}
+
+Matrix& Matrix::operator*(const Matrix& m){
+    return multiply(m);
+}
+
+Vector& Matrix::operator*(const Vector& v){
+    return multiply(v);
+}
+
+double& Matrix::operator()(const int row, const int col){
+    if(row >= rows || row < 0 || col >= columns || col < 0) printf("Error: Trying to access index larger than matrix!\n");
+    return data[row][col];
 }
 
 double Matrix::frobeniusNorm()
@@ -170,6 +215,7 @@ double Matrix::frobeniusNorm()
     }
     return norm;
 }
+
 
 // use fixed in place method
 // https://www.geeksforgeeks.org/inplace-m-x-n-size-matrix-transpose/

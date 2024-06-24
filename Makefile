@@ -16,8 +16,8 @@ TARGET := fingerprint_optimizer
 
 # Define the compiler and compiler flags
 CXX := g++
-CXXFLAGS := -std=c++17 -O2 -shared-libgcc -MMD -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
-LDFLAGS := -Xpreprocessor -fopenmp -L/opt/homebrew/opt/libomp/lib -lomp
+CXXFLAGS := -std=c++17 -O2 -shared-libgcc -MMD -fopenmp
+LDFLAGS := -Xpreprocessor -fopenmp
 
 # Define the object files (with paths relative to OBJ_DIR)
 OBJ_FILES := $(patsubst $(BASE_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(wildcard $(BASE_DIR)/*.cpp)) \

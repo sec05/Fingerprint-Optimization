@@ -14,6 +14,7 @@
 //#include <bits/stdc++.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <vector>
 #include "utils.h"
 #define MAXLINE 4096
 #define SHORTLINE 128

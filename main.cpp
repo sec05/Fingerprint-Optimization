@@ -12,11 +12,12 @@
 int main(int argc, char **argv)
 {
 	//OPT::Optimizer* optimizer = new OPT::Optimizer("_Ti.nn");
-	int m = 26;
-	NLA::Matrix* mat = new NLA::Matrix(m,m,"random");
-	mat->outputToFile("./Matrix Output/randomSymmetric.matrix");
-	mat->householderUpperHessenberg();
-	mat->outputToFile("./Matrix Output/tridiag.matrix");
+	int m = 3;
+	NLA::Matrix iden(m,m,"identity");
+	double arr[] = {1,2,3};
+	NLA::Vector v(arr,3);
+	iden = iden * 2;
+	(iden * v).outputToFile("product.txt");
 	return 0;
 }
 

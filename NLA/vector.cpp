@@ -34,24 +34,58 @@ void Vector::scale(double n){
     }
 }
 
-void Vector::add(Vector* v) {
-    if(dimension != v->dimension){
+NLA::Matrix& Vector::outerProduct(const Vector& v){
+    Matrix* A = new Matrix(dimension,v.dimension);
+    for(int i = 0; i < dimension; i++){
+        for(int j = 0; j < v.dimension; j++){
+            A->data[i][j] = components[i]*v.components[j];
+        }
+    }
+    return *A;
+}
+
+Vector& Vector::operator*(const double d){
+    scale(d);
+    return *this;
+}
+
+Matrix& Vector::operator*(const Vector& v){
+    return outerProduct(v);
+}
+
+void Vector::add(const Vector& v) {
+    if(dimension != v.dimension){
         printf("Error: Unable to add vectors! Dimensions incompatible!\n");
         return;
     }
     for(int i = 0; i < dimension; i++){
-        components[i]+=v->components[i];
+        components[i]+=v.components[i];
     }
 }
 
-void Vector::subtract(Vector* v) {
-    if(dimension != v->dimension){
+Vector& Vector::operator+(const Vector& v){
+    add(v);
+    return *this;
+}
+
+void Vector::subtract(const Vector& v) {
+    if(dimension != v.dimension){
         printf("Error: Unable to subtract vectors! Dimensions incompatible!");
         return;
     }
     for(int i = 0; i < dimension; i++){
-        components[i]-=v->components[i];
+        components[i]-=v.components[i];
     }
+}
+
+Vector& Vector::operator-(const Vector& v){
+    subtract(v);
+    return *this;
+}
+
+double& Vector::operator()(const int m){
+    if(m >= dimension || m < 0) printf("Error: Trying to access index larger than vector length!\n");
+    return components[m];
 }
 
 double Vector::dot(Vector* v) {
@@ -70,15 +104,7 @@ void Vector::makeUnitVector() {
     this->scale(1/sqrt(dot(this)));
 }
 
-NLA::Matrix* Vector::outerProduct(Vector* v){
-    Matrix* A = new Matrix(dimension,v->dimension);
-    for(int i = 0; i < dimension; i++){
-        for(int j = 0; j < v->dimension; j++){
-            A->data[i][j] = components[i]*v->components[j];
-        }
-    }
-    return A;
-}
+
 
 void Vector::outputToFile(std::string file){
     std::ofstream f;
