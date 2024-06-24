@@ -8,16 +8,16 @@
 #include <stdio.h>
 #include "optimizer.h"
 #include "NLA/matrix.h"
+#include "NLA/matrixAlgorithms.h"
 //read command line input.
 int main(int argc, char **argv)
 {
 	//OPT::Optimizer* optimizer = new OPT::Optimizer("_Ti.nn");
-	int m = 3;
-	NLA::Matrix iden(m,m,"identity");
-	double arr[] = {1,2,3};
-	NLA::Vector v(arr,3);
-	iden = iden * 2;
-	(iden * v).outputToFile("product.txt");
+	NLA::Matrix A = NLA::Matrix(3,3,"random symmetric");
+	A.outputToFile("./Matrix Output/A.matrix");
+	Matrix** EVs = francis(&A,100);
+	EVs[0]->outputToFile("./Matrix Output/vals.matrix");
+	EVs[1]->outputToFile("./Matrix Output/vecs.matrix");
 	return 0;
 }
 

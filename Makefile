@@ -58,7 +58,13 @@ clean:
 tridiag:
 	make
 	./fingerprint_optimizer
-	python Matrix\ Output/validator.py
+	python Matrix\ Output/tridiagValidator.py
+
+francis:
+	make
+	./fingerprint_optimizer
+	python3 Matrix\ Output/francisValidator.py
+
 
 # Phony targets
 .PHONY: all clean

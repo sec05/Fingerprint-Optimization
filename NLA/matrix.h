@@ -33,9 +33,6 @@ namespace NLA{
         Matrix* copyMatrix();
 
         // math algorithms
-        //Matrix **classicalGramSchmidt();
-        //Matrix **modifiedGramSchmidt();
-       // void householderUpperHessenberg();
         double frobeniusNorm();
 
         private:
