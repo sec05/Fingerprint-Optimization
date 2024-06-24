@@ -1,6 +1,11 @@
 #include "vector.h"
+#include "matrix.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <fstream>
+#include <math.h>
+#include <iomanip> 
+
 using namespace NLA;
 
 Vector::Vector(double* data, int length) {
@@ -52,7 +57,7 @@ void Vector::subtract(Vector* v) {
 double Vector::dot(Vector* v) {
     if(dimension != v->dimension){
         printf("Error: Unable to dot vectors! Dimensions incompatible!");
-        return NULL;
+        return -INFINITY;
     }
     double sum = 0;
     for(int i = 0; i < dimension; i++){
@@ -62,5 +67,27 @@ double Vector::dot(Vector* v) {
 }
 
 void Vector::makeUnitVector() {
-    scale(dot(this));
+    this->scale(1/sqrt(dot(this)));
+}
+
+NLA::Matrix* Vector::outerProduct(Vector* v){
+    Matrix* A = new Matrix(dimension,v->dimension);
+    for(int i = 0; i < dimension; i++){
+        for(int j = 0; j < v->dimension; j++){
+            A->data[i][j] = components[i]*v->components[j];
+        }
+    }
+    return A;
+}
+
+void Vector::outputToFile(std::string file){
+    std::ofstream f;
+    f.open(file);
+    f << std::setprecision(20);
+    for(int i = 0; i < dimension; i++){
+        f << components[i];
+        std::string s = i == dimension - 1 ? "" : " ";
+        f << s;
+    }
+    f<<std::endl;
 }

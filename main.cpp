@@ -11,7 +11,12 @@
 //read command line input.
 int main(int argc, char **argv)
 {
-	OPT::Optimizer* optimizer = new OPT::Optimizer("_Ti.nn");
+	//OPT::Optimizer* optimizer = new OPT::Optimizer("_Ti.nn");
+	int m = 26;
+	NLA::Matrix* mat = new NLA::Matrix(m,m,"random");
+	mat->outputToFile("./Matrix Output/randomSymmetric.matrix");
+	mat->householderUpperHessenberg();
+	mat->outputToFile("./Matrix Output/tridiag.matrix");
 	return 0;
 }
 

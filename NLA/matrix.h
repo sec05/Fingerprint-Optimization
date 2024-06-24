@@ -28,6 +28,7 @@ namespace NLA{
         bool equals(Matrix*);
         NLA::Vector* getRow(int);
         NLA::Vector* getColumn(int);
+        
 
         //utility algorithms
         bool outputToFile(std::string);
@@ -36,6 +37,7 @@ namespace NLA{
         // math algorithms
         Matrix **classicalGramSchmidt();
         Matrix **modifiedGramSchmidt();
+        void householderUpperHessenberg();
     };
 }
 #endif

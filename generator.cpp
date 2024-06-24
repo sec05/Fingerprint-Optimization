@@ -251,7 +251,8 @@ void Generator::generate_opt_inputs()
 
     // now we add on new blocks of radial fingerprints
     // set up random generation
-    std::default_random_engine gen;
+    std::random_device rd;
+    std::default_random_engine gen(rd());
     std::uniform_real_distribution<double> dist(radialFingerprintsLowerBound,radialFingerprintsUpperBound);
     
     // loop and do generation for radial

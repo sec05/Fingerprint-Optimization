@@ -55,6 +55,11 @@ $(OBJ_DIR)/%.o: $(STATE_DIR)/%.cpp
 clean:
 	rm -rf $(OBJ_DIR) $(TARGET)
 
+tridiag:
+	make
+	./fingerprint_optimizer
+	python Matrix\ Output/validator.py
+
 # Phony targets
 .PHONY: all clean
 
