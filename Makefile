@@ -1,13 +1,11 @@
 # Define directories
 BASE_DIR := .
-NLA_DIR := ./NLA
 OBJ_DIR := ./obj
 FINGERPRINT_DIR := ./Fingerprints
 STATE_DIR := ./State
 
 # Collect all .cpp files in the base directory, NLA directory, Fingerprints directory, and State directory
 SRC_FILES := $(wildcard $(BASE_DIR)/*.cpp) \
-             $(wildcard $(NLA_DIR)/*.cpp) \
              $(wildcard $(FINGERPRINT_DIR)/*.cpp) \
              $(wildcard $(STATE_DIR)/*.cpp)
 
@@ -16,12 +14,11 @@ TARGET := fingerprint_optimizer
 
 # Define the compiler and compiler flags
 CXX := g++
-CXXFLAGS := -std=c++17 -O2 -shared-libgcc -MMD -fopenmp
-LDFLAGS := -Xpreprocessor -fopenmp
+CXXFLAGS := -std=c++17 -O2 -shared-libgcc -MMD -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
+LDFLAGS := -Xpreprocessor -fopenmp -L/opt/homebrew/opt/libomp/lib -lomp
 
 # Define the object files (with paths relative to OBJ_DIR)
 OBJ_FILES := $(patsubst $(BASE_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(wildcard $(BASE_DIR)/*.cpp)) \
-             $(patsubst $(NLA_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(wildcard $(NLA_DIR)/*.cpp)) \
              $(patsubst $(FINGERPRINT_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(wildcard $(FINGERPRINT_DIR)/*.cpp)) \
              $(patsubst $(STATE_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(wildcard $(STATE_DIR)/*.cpp))
 
@@ -37,9 +34,6 @@ $(TARGET): $(OBJ_FILES)
 
 # Rule to build object files
 $(OBJ_DIR)/%.o: $(BASE_DIR)/%.cpp
-	$(CXX) $(CXXFLAGS) -MMD -c $< -o $@
-
-$(OBJ_DIR)/%.o: $(NLA_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -MMD -c $< -o $@
 
 $(OBJ_DIR)/%.o: $(FINGERPRINT_DIR)/%.cpp
@@ -58,13 +52,7 @@ clean:
 tridiag:
 	make
 	./fingerprint_optimizer
-	python Matrix\ Output/tridiagValidator.py
-
-francis:
-	make
-	./fingerprint_optimizer
-	python3 Matrix\ Output/francisValidator.py
-
+	python Matrix\ Output/validator.py
 
 # Phony targets
 .PHONY: all clean

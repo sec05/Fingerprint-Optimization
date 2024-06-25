@@ -1,7 +1,7 @@
 /*
 This class is the driver class for the optimization program 
 */
-#include "NLA/matrix.h"
+#include <armadillo>
 
 namespace OPT{
 class Optimizer{
@@ -9,7 +9,7 @@ class Optimizer{
     Optimizer(char*);
     ~Optimizer();
 
-    NLA::Matrix* fingerprints;
+    arma::dmat* fingerprints;
     char* inputFile;
 
 };

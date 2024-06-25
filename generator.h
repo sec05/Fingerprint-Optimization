@@ -2,7 +2,7 @@
 This class generates the new input file and the fingerprint matrix
 */
 #include "pair_spin_rann.h"
-#include "NLA/matrix.h"
+#include <armadillo>
 #include <map>
 
 #ifndef GENERATOR_H
@@ -16,7 +16,7 @@ namespace OPT
         Generator(char*);
         ~Generator();
 
-        NLA::Matrix* generate_fingerprint_matrix();
+        arma::dmat* generate_fingerprint_matrix();
         int numRadialFingerprints; 
         double radialFingerprintsLowerBound; 
         double radialFingerprintsUpperBound; 

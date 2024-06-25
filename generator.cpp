@@ -17,7 +17,7 @@ Generator::~Generator(){
    delete calibrator;
 }
 
-NLA::Matrix* Generator::generate_fingerprint_matrix(){
+arma::dmat* Generator::generate_fingerprint_matrix(){
     numRadialFingerprints = 2;
     numBondFingerprints = 10;
     radialFingerprintsLowerBound = 0;
@@ -46,18 +46,19 @@ NLA::Matrix* Generator::generate_fingerprint_matrix(){
     }
     // write matrix to file
     // create matrix ******* CHECK SIZE FOR BIGGER INPUTS
-    NLA::Matrix* m = new NLA::Matrix(rows,columns);
+    arma::dmat* m = new arma::dmat(rows,columns);
     int r = 0;
     for(int n = 0; n < calibrator->nsims; n++){
         LAMMPS_NS::PairRANN::Simulation& sim = calibrator->sims[n];
         for(int i = 0; i < sim.inum; i++){
             for(int j = 0; j < columns; j++){
-                m->data[r][j] = sim.features[i][j];
+                
+                m->at(r,j) = sim.features[i][j];
             }
             r++;
         }
     }
-    m->outputToFile("./Optimizer Output/optimizer.matrix");
+    m->save("./Optimizer Output/optimizer.matrix");
     printf("Generator: created fingerprint matrix!\n");
     return m;
 }
