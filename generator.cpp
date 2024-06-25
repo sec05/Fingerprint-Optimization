@@ -17,14 +17,14 @@ Generator::~Generator(){
    delete calibrator;
 }
 
-arma::dmat* Generator::generate_fingerprint_matrix(){
-    numRadialFingerprints = 2;
-    numBondFingerprints = 10;
-    radialFingerprintsLowerBound = 0;
-    radialFingerprintsUpperBound = 1;
-    bondFingerprintsLowerBound = 0;
-    bondFingerprintsUpperBound = 1;
+arma::dmat* Generator::generate_fingerprint_matrix(int numRadialFingerprints, double radialFingerprintsLowerBound, double radialFingerprintsUpperBound, int numBondFingerprints, double bondFingerprintsLowerBound, double bondFingerprintsUpperBound){
     // create input file
+    this->numRadialFingerprints = numRadialFingerprints;
+    this->numBondFingerprints = numBondFingerprints;
+    this->radialFingerprintsLowerBound = radialFingerprintsLowerBound;
+    this->radialFingerprintsUpperBound = radialFingerprintsUpperBound;
+    this->bondFingerprintsLowerBound = bondFingerprintsLowerBound;
+    this->bondFingerprintsUpperBound = bondFingerprintsUpperBound;
     generate_opt_inputs();
     std::cout << "generated input!"<<std::endl;
     // then pass it through set FOR NOW
@@ -58,7 +58,7 @@ arma::dmat* Generator::generate_fingerprint_matrix(){
             r++;
         }
     }
-    m->save("./Optimizer Output/optimizer.matrix");
+    m->save("./Optimizer Ouput/fingerprints.matrix",arma::arma_ascii);
     printf("Generator: created fingerprint matrix!\n");
     return m;
 }
@@ -85,17 +85,10 @@ void Generator::generate_opt_inputs()
         printf("Generator error: only supports one atom systems!\n");
         return;
     }
-    #ifdef DEBUG
-    printf("DEBUG: Found atom types:");
-    for(std::string a : atomTypes) printf("%s ",a.c_str());
-    printf("\n");
-    #endif
+
     // make sure number of fingerprints is number we are going to generate
     int fnIndex = utils::searchTable("fingerprintsperelement:"+atomTypes[0]+":", inputTable);
     inputTable->at(fnIndex).second = std::to_string(numRadialFingerprints+1);
-    #ifdef DEBUG
-    printf("DEBUG: fingerprintsperelement=%d\n",numRadialFingerprints+1);
-    #endif
 
     // find amount of alphas ie compute |o - n| + 1 assuming o < 0 and n > 0
     // make sure they are in the map by looking for key then get value
@@ -127,10 +120,7 @@ void Generator::generate_opt_inputs()
         alphas = abs(o - n) + 1;
     else
         alphas = abs(o - n);
-    #ifdef DEBUG
-    printf("DEBUG: Found o=%d and n=%d setting alphas=%d\n",o,n,alphas);
-    printf("DEBUG: Generating radial template\n");
-    #endif
+
     // we now need to make a "template" of the radial blocks
     // first we assemble all the keys we are looking for
     std::vector<std::string> radialKeys = {"fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":radialscreened_0:re:", "fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":radialscreened_0:rc:", "fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":radialscreened_0:alpha:", "fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":radialscreened_0:dr:", "fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":radialscreened_0:o:", "fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":radialscreened_0:n:"};
@@ -147,9 +137,7 @@ void Generator::generate_opt_inputs()
         }
         radialValues.push_back((*inputTable)[index].second);
     }
-    #ifdef DEBUG
-    printf("DEBUG: Generating bond template\n");
-    #endif
+
     // we now do the same thing for bond
     std::vector<std::string> bondKeys{"fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":bondscreened_0:re:","fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":bondscreened_0:rc:", "fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":bondscreened_0:alphak:", "fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":bondscreened_0:dr:", "fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":bondscreened_0:k:", "fingerprintconstants:" + atomTypes.at(0) + "_" + atomTypes.at(0) + "_" + atomTypes.at(0) + ":bondscreened_0:m:"};
     std::vector<std::string> bondValues = {};
@@ -189,16 +177,10 @@ void Generator::generate_opt_inputs()
         printf("Generator error: could not find alpha_k!\n");
         return;
     }
-    #ifdef DEBUG
-    printf("DEBUG: Finished generating templates \n");
-    #endif
 
     // need to update the layer 0 size
     int layer0Index = utils::searchTable("layersize:"+atomTypes[0]+":0:",inputTable);
     inputTable->at(layer0Index).second = std::to_string(m*numBondFingerprints+alphas*numRadialFingerprints);
-    #ifdef DEBUG
-    printf("DEBUG: Finished updating layer 0 size \n");
-    #endif
 
     // before adding on fingerprints we must get rid of the existing ones
     int elements = 0;
@@ -211,9 +193,7 @@ void Generator::generate_opt_inputs()
         }
         elements++;
     }
-    #ifdef DEBUG
-    printf("DEBUG: Finished removing old fingerprints\n");
-    #endif
+
     // we now write the amount of randialscreened_0,1,2,3...
     int rIndex = utils::searchTable("fingerprints:"+atomTypes[0]+"_"+atomTypes[0]+":",inputTable);
     std::string radials = "";
@@ -239,9 +219,7 @@ void Generator::generate_opt_inputs()
     }
 
     delete inputTable;
-    #ifdef DEBUG
-    printf("DEBUG: Finished writing map back to file and deleting table\n");
-    #endif
+
     // open file to write generated columns
     std::ofstream fingerprintsVectorFile;
     fingerprintsVectorFile.open("./Optimizer Output/"+inputFile+".optv");
@@ -270,7 +248,10 @@ void Generator::generate_opt_inputs()
         for(int j = 0; j < radialKeys.size(); j++){
             size_t pos = radialKeys.at(j).find("radialscreened_"+std::to_string(i-1));
             if(pos != std::string::npos){
-                radialKeys.at(j).replace(pos,16,"radialscreened_"+std::to_string(i));
+                size_t p = radialKeys.at(j).find_last_of(":");
+                p = radialKeys.at(j).find_last_of(":",p-1);
+                std::string variable = radialKeys.at(j).substr(p);
+                radialKeys.at(j)="fingerprintconstants:"+atomTypes[0]+"_"+atomTypes[0]+":radialscreened_"+std::to_string(i)+variable;
             }
             // update with new alphas if needed
             pos = radialKeys.at(j).find("alpha");
@@ -285,9 +266,7 @@ void Generator::generate_opt_inputs()
             fingerprintsFile << radialValues.at(j) << std::endl;
         }
     }
-    #ifdef DEBUG
-    printf("DEBUG: Finished writing new radial fingerprints\n");
-    #endif
+
     //write to vector and optimized input file
     dist = std::uniform_real_distribution<double>(bondFingerprintsLowerBound,bondFingerprintsUpperBound);
     std::string alpha_ks = "";
@@ -307,13 +286,9 @@ void Generator::generate_opt_inputs()
         fingerprintsFile << bondKeys.at(i) << std::endl;
         fingerprintsFile << bondValues.at(i) << std::endl;
     }
-    #ifdef DEBUG
-    printf("DEBUG: Finished writing new bond fingerprints\n");
-    #endif
+
     fingerprintsFile.close();
     fingerprintsVectorFile.close();
-
-    // std::filesystem::copy_file(inputFile, strcat(inputFile,".optimizer"));
 }
 
 // function for parsing top comment line with generation requirements

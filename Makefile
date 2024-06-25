@@ -15,7 +15,8 @@ TARGET := fingerprint_optimizer
 # Define the compiler and compiler flags
 CXX := g++
 CXXFLAGS := -std=c++17 -O2 -shared-libgcc -MMD -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
-LDFLAGS := -Xpreprocessor -fopenmp -L/opt/homebrew/opt/libomp/lib -lomp
+LDFLAGS := -Xpreprocessor -fopenmp -L/opt/homebrew/opt/libomp/lib -L/opt/homebrew/opt/openblas/lib -L/opt/homebrew/opt/lapack/lib -Wl,-rpath,/opt/homebrew/opt/armadillo/lib
+LDLIBS :=  -lomp -larmadillo -lopenblas -llapack
 
 # Define the object files (with paths relative to OBJ_DIR)
 OBJ_FILES := $(patsubst $(BASE_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(wildcard $(BASE_DIR)/*.cpp)) \
@@ -30,7 +31,7 @@ $(shell mkdir -p $(OBJ_DIR))
 
 # Rule to build the target executable
 $(TARGET): $(OBJ_FILES)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 # Rule to build object files
 $(OBJ_DIR)/%.o: $(BASE_DIR)/%.cpp
