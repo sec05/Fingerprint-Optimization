@@ -13,10 +13,9 @@ namespace OPT
 
         arma::dmat *fingerprints;
         char *inputFile;
-        Generator* generator;
+        Generator *generator;
 
         arma::uvec getKBestColumns(int);
         std::vector<std::string> returnKColumnVariables(arma::uvec);
-
     };
 }

@@ -1149,6 +1149,7 @@ void PairRANN::compute_fingerprints(){
 			for (ii=0;ii<sims[nn].inum;ii++){
 				i = sims[nn].ilist[ii];
 			  	itype = map[sims[nn].type[i]];
+				printf("%d\n",nelements);
 				if (net[itype].layers==0){errorf(FLERR,"atom type found without corresponding network defined");}
 			    f = net[itype].dimensions[0];
 				jnum = sims[nn].numneigh[i];
@@ -1184,42 +1185,46 @@ void PairRANN::compute_fingerprints(){
 			  itype = map[sims[nn].type[i]];
 			  f = net[itype].dimensions[0];
 			  jnum = sims[nn].numneigh[i];
-			  double xn[jnum];
-			  double yn[jnum];
-			  double zn[jnum];
-			  int tn[jnum];
-			  int jl[jnum];
+			  double* xn = new double[jnum];
+			  double* yn = new double[jnum];
+			  double* zn = new double[jnum];
+			  int* tn = new int[jnum];
+			  int* jl = new int[jnum];
 			  cull_neighbor_list(xn,yn,zn,tn,&jnum,jl,i,nn,cutmax);
-			  double features [f];
-			  double dfeaturesx[f*jnum];
-			  double dfeaturesy[f*jnum];
-			  double dfeaturesz[f*jnum];
+			  double* features = new double[f];
+			  double* dfeaturesx = new double[f*jnum];
+			  double* dfeaturesy = new double[f*jnum];
+			  double* dfeaturesz = new double[f*jnum];
 			  for (j=0;j<f;j++){
 				  features[j]=0;
 			  }
 			  for (j=0;j<f*jnum;j++){
 				  dfeaturesx[j]=dfeaturesy[j]=dfeaturesz[j]=0;
 			  }
-			  //screening is calculated once for all atoms if any fingerprint uses it.
-			  double Sik[jnum];
-			  double dSikx[jnum];
-			  double dSiky[jnum];
-			  double dSikz[jnum];
-			  //TO D0: stack overflow often happens here from stack limit too low.
-			  double dSijkx[jnum*jnum];
-			  double dSijky[jnum*jnum];
-			  double dSijkz[jnum*jnum];
-			  //TO D0: stack overflow often happens here from stack limit too low.
-			  bool Bij[jnum];
-			  double sx[jnum*f];
-			  double sy[jnum*f];
-			  double sz[jnum*f];
-			  double sxx[jnum*f];
-			  double sxy[jnum*f];
-			  double sxz[jnum*f];
-			  double syy[jnum*f];
-			  double syz[jnum*f];
-			  double szz[jnum*f];
+			
+				//screening is calculated once for all atoms if any fingerprint uses it.
+				double* Sik = new double[jnum];
+				double* dSikx = new double[jnum];
+				double* dSiky = new double[jnum];
+				double* dSikz = new double[jnum];
+
+				//TO DO: stack overflow often happens here from stack limit too low.
+				double* dSijkx = new double[jnum * jnum];
+				double* dSijky = new double[jnum * jnum];
+				double* dSijkz = new double[jnum * jnum];
+
+				//TO DO: stack overflow often happens here from stack limit too low.
+				bool* Bij = new bool[jnum];
+
+				double* sx = new double[jnum * f];
+				double* sy = new double[jnum * f];
+				double* sz = new double[jnum * f];
+				double* sxx = new double[jnum * f];
+				double* sxy = new double[jnum * f];
+				double* sxz = new double[jnum * f];
+				double* syy = new double[jnum * f];
+				double* syz = new double[jnum * f];
+				double* szz = new double[jnum * f];
 			  for (j=0;j<f*jnum;j++){
 				  sx[j]=sy[j]=sz[j]=0;
 				  sxx[j]=sxy[j]=sxz[j]=syy[j]=syz[j]=szz[j]=0;
@@ -1463,6 +1468,7 @@ void PairRANN::cull_neighbor_list(double *xn,double *yn, double *zn,int *tn, int
 	type = sims[sn].type;
 	jlist = sims[sn].firstneigh[i];
 	count = 0;
+
 	for (jj=0;jj<jnum[0];jj++){
 		j = jlist[jj];
 		j &= NEIGHMASK;
