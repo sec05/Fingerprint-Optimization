@@ -52,36 +52,18 @@ namespace RANN {
     void init_screen(int);
 
     //no screen,no spin
-    virtual void compute_fingerprint(double *, double *, double *, double *, int, int, double *,
+    virtual void compute_fingerprint(double *, int, int, double *,
                                      double *, double *, int *, int, int *)
     {
     }
     //screen
-    virtual void compute_fingerprint(double *, double *, double *, double *, double *, double *,
-                                     double *, double *, double *, double *, double *, bool *, int,
+    virtual void compute_fingerprint(double *, double *, bool *, int,
                                      int, double *, double *, double *, int *, int, int *)
-    {
-    }
-    //spin
-    virtual void compute_fingerprint(double *, double *, double *, double *, double *, double *,
-                                    double *, double *, double *, double *, double *, double *,
-                                     double *, int, int, double *, double *, double *, int *, int,
-                                     int *)
-    {
-    }
-    //spin,screen
-    virtual void compute_fingerprint(double *, double *, double *, double *, double *, double *,
-                                     double *, double *, double *, double *, double *, double *,
-                                     double *, double *, bool *, int, int, double *, double *,
-                                     double *, int *, int, int *)
     {
     }
 
     //spin,screen,secondderivative
-    virtual void compute_fingerprint(double *, double *, double *, double *, double *, double *,
-                                     double *, double *, double *, double *, double *, double *,
-                                     double *, double *, double *, double *, double *, double *,
-                                     double *, double *, bool *, int, int, double *, double *,
+    virtual void compute_fingerprint(double *, bool *, int, int, double *, double *,
                                      double *, int *, int, int *)
     {
     }

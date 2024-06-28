@@ -1,5 +1,6 @@
 #include "generator.h"
 #include "utils.h"
+#include "omp.h"
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -40,6 +41,7 @@ arma::dmat *Generator::generate_fingerprint_matrix(int numRadialFingerprints, do
     // need to find the matrix size to allocate **FIND BETTER METHOD**
     int rows = 0;
     int columns = 0;
+
     for (int n = 0; n < calibrator->nsims; n++)
     {
         LAMMPS_NS::PairRANN::Simulation &sim = calibrator->sims[n];
@@ -49,10 +51,12 @@ arma::dmat *Generator::generate_fingerprint_matrix(int numRadialFingerprints, do
             columns = calibrator->net[calibrator->map[sim.type[sim.ilist[i]]]].dimensions[0];
         }
     }
+
     // write matrix to file
     // create matrix ******* CHECK SIZE FOR BIGGER INPUTS
     arma::dmat *m = new arma::dmat(rows, columns);
     int r = 0;
+
     for (int n = 0; n < calibrator->nsims; n++)
     {
         LAMMPS_NS::PairRANN::Simulation &sim = calibrator->sims[n];
@@ -60,14 +64,14 @@ arma::dmat *Generator::generate_fingerprint_matrix(int numRadialFingerprints, do
         {
             for (int j = 0; j < columns; j++)
             {
-
                 m->at(r, j) = sim.features[i][j];
             }
             r++;
         }
     }
-    m->save("./Optimizer Ouput/fingerprints.matrix", arma::arma_ascii);
-    printf("Generator: created fingerprint matrix!\n");
+    
+    delete calibrator;
+    delete [] f;
     return m;
 }
 
@@ -165,6 +169,7 @@ void Generator::generate_opt_inputs()
     // need to first find indicies of m and k
     int m = -1;
     int alpha_kIndex = -1;
+    
     for (int i = 0; i < bondKeys.size(); i++)
     {
         size_t pos = bondKeys.at(i).find(":m:");

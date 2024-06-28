@@ -44,13 +44,12 @@ namespace RANN {
     void write_values(FILE *);
     void init(int *, int);
     void allocate();
-    void compute_fingerprint(double *, double *, double *, double *, int, int, double *, double *,
+    void compute_fingerprint(double *, int, int, double *, double *,
                              double *, int *, int, int *);
     void generate_exp_cut_table();
     int get_length();
 
     double *expcuttable;
-    double *dfctable;
     double dr;
     double *alpha_k;
     double re;

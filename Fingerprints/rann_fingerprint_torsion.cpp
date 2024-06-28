@@ -58,7 +58,6 @@ Fingerprint_torsion::~Fingerprint_torsion() {
   delete[] alpha_k;
   delete[] atomtypes;
   delete[] expcuttable;
-  delete[] dfctable;
   delete[] rinvsqrttable;
 }
 
@@ -182,23 +181,16 @@ void Fingerprint_torsion::generate_exp_cut_table() {
   int res = pair->res;
   double cutmax = pair->cutmax;
   expcuttable = new double[(res+buf)*(kmax)];
-  dfctable = new double[res+buf];
   for (m=0;m<(res+buf);m++) {
     r1 = cutmax*cutmax*(double)(m)/(double)(res);
     for (n=0;n<(kmax);n++) {
       expcuttable[n+m*(kmax)] = exp(-alpha_k[n]/re*sqrt(r1))*cutofffunction(sqrt(r1),rc_inner,dr);
     }
-    if (sqrt(r1)>=rc_inner || sqrt(r1) <= (rc_inner-dr)) {
-      dfctable[m]=0;
-    }
-    else{
-      dfctable[m]=-8*pow(1-(rc_inner-sqrt(r1))/dr,3)/dr/(1-pow(1-(rc_inner-sqrt(r1))/dr,4));
-    }
   }
 }
 
 //Called by do3bodyfeatureset. Algorithm for low neighbor numbers and large series of bond angle powers
-void Fingerprint_torsion::compute_fingerprint(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,int ii, int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * jl) {
+void Fingerprint_torsion::compute_fingerprint(double * features,int ii, int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * jl) {
   int i,jj,itype,jtype,ktype,ltype,kk,m,n,ll,k1;
   int *ilist;
   int jid,lnum;
@@ -221,7 +213,6 @@ void Fingerprint_torsion::compute_fingerprint(double * features,double * dfeatur
   double expr[jnum][kmax];
   double y[jnum][3];
   double ri[jnum];
-  double dfc[jnum];
   int kb = kmax;
   int mb = mlength;
   double c41[kmax];
@@ -266,9 +257,7 @@ void Fingerprint_torsion::compute_fingerprint(double * features,double * dfeatur
     for (k1=0;k1<kmax;k1++) {
       expr[kk][k1] = p1[k1]+0.5*r1*(p2[k1]-p0[k1]+r1*(2.0*p0[k1]-5.0*p1[k1]+4.0*p2[k1]-p3[k1]+r1*(3.0*(p1[k1]-p2[k1])+p3[k1]-p0[k1])));
     }
-    double* q = &dfctable[m1-1];
     double* r2 = &rinvsqrttable[m1-1];
-    dfc[kk] = q[1] + 0.5 * r1*(q[2] - q[0] + r1*(2.0*q[0] - 5.0*q[1] + 4.0*q[2] - q[3] + r1*(3.0*(q[1] - q[2]) + q[3] - q[0])));
     ri[kk] = r2[1] + 0.5 * r1*(r2[2] - r2[0] + r1*(2.0*r2[0] - 5.0*r2[1] + 4.0*r2[2] - r2[3] + r1*(3.0*(r2[1] - r2[2]) + r2[3] - r2[0])));
     y[kk][0]=delx*ri[kk];
     y[kk][1]=dely*ri[kk];
@@ -280,11 +269,6 @@ void Fingerprint_torsion::compute_fingerprint(double * features,double * dfeatur
     jtype = tn[jj];
     if (jtypes != nelements && jtypes != jtype) {
       continue;
-    }
-    for (n = 0;n<kmax;n++) {
-      c41[n]=(-ct[n]+dfc[jj])*y[jj][0];
-      c51[n]=(-ct[n]+dfc[jj])*y[jj][1];
-      c61[n]=(-ct[n]+dfc[jj])*y[jj][2];
     }
     jid = jl[jj];
     lnum = sim->numneigh[jid];
@@ -331,9 +315,7 @@ void Fingerprint_torsion::compute_fingerprint(double * features,double * dfeatur
       for (k1=0;k1<kmax;k1++) {
           expr2[ll][k1] = p1[k1]+0.5*r1*(p2[k1]-p0[k1]+r1*(2.0*p0[k1]-5.0*p1[k1]+4.0*p2[k1]-p3[k1]+r1*(3.0*(p1[k1]-p2[k1])+p3[k1]-p0[k1])));
       }
-      double* q = &dfctable[m1-1];
       double* r2 = &rinvsqrttable[m1-1];
-      dfc2[ll] = q[1] + 0.5 * r1*(q[2] - q[0] + r1*(2.0*q[0] - 5.0*q[1] + 4.0*q[2] - q[3] + r1*(3.0*(q[1] - q[2]) + q[3] - q[0])));
       ri2[ll] = r2[1] + 0.5 * r1*(r2[2] - r2[0] + r1*(2.0*r2[0] - 5.0*r2[1] + 4.0*r2[2] - r2[3] + r1*(3.0*(r2[1] - r2[2]) + r2[3] - r2[0])));
       y2[ll][0]=delx*ri2[ll];
       y2[ll][1]=dely*ri2[ll];
@@ -367,12 +349,6 @@ void Fingerprint_torsion::compute_fingerprint(double * features,double * dfeatur
       if (ktypes != nelements && ktypes != ktype) {
         continue;
       }
-      for (n = 0;n<kmax;n++) {
-        double t = -ct[n]+dfc[kk];
-        c42[n]=t*y[kk][0];
-        c52[n]=t*y[kk][1];
-        c62[n]=t*y[kk][2];
-      }
       double ybg[3];
       ybg[0] = y[jj][1]*y[kk][2]-y[jj][2]*y[kk][1];
       ybg[1] = y[jj][2]*y[kk][0]-y[jj][0]*y[kk][2];
@@ -386,30 +362,6 @@ void Fingerprint_torsion::compute_fingerprint(double * features,double * dfeatur
         if (ltypes != nelements && ltypes != ltype) {
           continue;
         }
-        double ygd[3];
-        double ybd[3];
-        double dot;
-        double ddb[3];
-        double ddg[3];
-        double ddd[3];
-        ybd[0] = y[jj][1]*y2[ll][2]-y[jj][2]*y2[ll][1];
-        ybd[1] = y[jj][2]*y2[ll][0]-y[jj][0]*y2[ll][2];
-        ybd[2] = y[jj][0]*y2[ll][1]-y[jj][1]*y2[ll][0];
-        dot = ybg[0]*ybd[0]+ybg[1]*ybd[1]+ybg[2]*ybd[2];
-        ddb[0] = (ybg[1]*-y2[ll][2]+ybd[1]*-y[kk][2]+ybg[2]*y2[ll][1]+ybd[2]*y[kk][1]-2*dot*y[jj][0])*ri[jj];
-        ddb[1] = (ybg[0]*y2[ll][2]+ybd[0]*y[kk][2]+ybg[2]*-y2[ll][0]+ybd[2]*-y[kk][0]-2*dot*y[jj][1])*ri[jj];
-        ddb[2] = (ybg[0]*-y2[ll][1]+ybd[0]*-y[kk][1]+ybg[1]*y2[ll][0]+ybd[1]*y[kk][0]-2*dot*y[jj][2])*ri[jj];
-        ddg[0] = (ybd[1]*y[jj][2]+ybd[2]*-y[jj][1]-dot*y[kk][0])*ri[kk];
-        ddg[1] = (ybd[0]*-y[jj][2]+ybd[2]*y[jj][0]-dot*y[kk][1])*ri[kk];
-        ddg[2] = (ybd[0]*y[jj][1]+ybd[1]*-y[jj][0]-dot*y[kk][2])*ri[kk];
-        ddd[0] = (ybg[1]*y[jj][2]+ybg[2]*-y[jj][1]-dot*y2[ll][0])*ri2[ll];
-        ddd[1] = (ybg[0]*-y[jj][2]+ybg[2]*y[jj][0]-dot*y2[ll][1])*ri2[ll];
-        ddd[2] = (ybg[0]*y[jj][1]+ybg[1]*-y[jj][0]-dot*y2[ll][2])*ri2[ll];
-        ddb[0] -= (ybg[1]*y[jj][2]+ybg[2]*-y[jj][1]-dot*y2[ll][0])*ri2[ll];
-        ddb[1] -= (ybg[0]*-y[jj][2]+ybg[2]*y[jj][0]-dot*y2[ll][1])*ri2[ll];
-        ddb[2] -= (ybg[0]*y[jj][1]+ybg[1]*-y[jj][0]-dot*y2[ll][2])*ri2[ll];
-        double dot1;
-        double dot3;
         for (n = 0;n<kmax;n++) {
           double t = -ct[n]+dfc2[ll];
           c43[n]=t*y2[ll][0];
@@ -420,49 +372,6 @@ void Fingerprint_torsion::compute_fingerprint(double * features,double * dfeatur
           c64[n]=c61[n]-c63[n];
         }
         count = startingneuron;
-        for (n=0;n<kb;n++) {
-          //m=0
-          dot1 = dot;
-          dot3 = 1;
-          double ex = expr[jj][n]*expr[kk][n]*expr2[ll][n];
-          features[count]+=ex;
-          dfeaturesx[jj*f+count]+=ex*c44[n];
-          dfeaturesy[jj*f+count]+=ex*c54[n];
-          dfeaturesz[jj*f+count]+=ex*c64[n];
-          dfeaturesx[kk*f+count]+=ex*c42[n];
-          dfeaturesy[kk*f+count]+=ex*c52[n];
-          dfeaturesz[kk*f+count]+=ex*c62[n];
-          dfeaturesx[l2*f+count]+=ex*c43[n];
-          dfeaturesy[l2*f+count]+=ex*c53[n];
-          dfeaturesz[l2*f+count]+=ex*c63[n];
-          count++;
-          for (m=1;m<mb;m++) {
-            dfeaturesx[jj*f+count]+=ex*(m*ddb[0]*dot3+c44[n]*dot1);
-            dfeaturesy[jj*f+count]+=ex*(m*ddb[1]*dot3+c54[n]*dot1);
-            dfeaturesz[jj*f+count]+=ex*(m*ddb[2]*dot3+c64[n]*dot1);
-            dfeaturesx[kk*f+count]+=ex*(m*ddg[0]*dot3+c42[n]*dot1);
-            dfeaturesy[kk*f+count]+=ex*(m*ddg[1]*dot3+c52[n]*dot1);
-            dfeaturesz[kk*f+count]+=ex*(m*ddg[2]*dot3+c62[n]*dot1);
-            dfeaturesx[l2*f+count]+=ex*(m*ddd[0]*dot3+c43[n]*dot1);
-            dfeaturesy[l2*f+count]+=ex*(m*ddd[1]*dot3+c53[n]*dot1);
-            dfeaturesz[l2*f+count]+=ex*(m*ddd[2]*dot3+c63[n]*dot1);
-            features[count]+=ex*dot1;
-            count++;
-            dot3 = dot1;
-            dot1*=dot;
-          }
-        }
-      }
-    }
-  }
-  for (jj=0;jj<jnum;jj++) {
-    count = startingneuron;
-    for (n=0;n<kb;n++) {
-      for (m=0;m<mb;m++) {
-        dfeaturesx[jnum*f+count]-=dfeaturesx[jj*f+count];
-        dfeaturesy[jnum*f+count]-=dfeaturesy[jj*f+count];
-        dfeaturesz[jnum*f+count]-=dfeaturesz[jj*f+count];
-        count++;
       }
     }
   }
