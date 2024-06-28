@@ -59,7 +59,6 @@ Fingerprint_radial::~Fingerprint_radial()
   delete[] atomtypes;
   delete[] radialtable;
   delete[] alpha;
-  delete[] dfctable;
   delete[] rinvsqrttable;
 }
 
@@ -152,17 +151,10 @@ void Fingerprint_radial::allocate()
   int res = pair->res;
   double cutmax = pair->cutmax;
   radialtable = new double[(res+buf)*get_length()];
-  dfctable = new double[res+buf];
   for (k=0;k<(res+buf);k++) {
     r1 = cutmax*cutmax*(double)(k)/(double)(res);
     for (m=0;m<=(nmax-omin);m++) {
       radialtable[k*(nmax-omin+1)+m]=pow(sqrt(r1)/re,m+omin)*exp(-alpha[m]*sqrt(r1)/re)*cutofffunction(sqrt(r1),rc,dr);
-    }
-    if (sqrt(r1)>=rc || sqrt(r1) <= (rc-dr)) {
-        dfctable[k]=0;
-    }
-    else{
-    dfctable[k]=-8*pow(1-(rc-sqrt(r1))/dr,3)/dr/(1-pow(1-(rc-sqrt(r1))/dr,4));
     }
   }
   generate_rinvssqrttable();
@@ -176,7 +168,7 @@ void Fingerprint_radial::init(int *i,int _id)
   id = _id;
 }
 
-void Fingerprint_radial::compute_fingerprint(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/)
+void Fingerprint_radial::compute_fingerprint(double * features,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/)
 {
   int nelements = pair->nelements;
   int res = pair->res;
@@ -213,23 +205,13 @@ void Fingerprint_radial::compute_fingerprint(double * features,double * dfeature
     double *p2 = &radialtable[(m1+1)*(nmax-omin+1)];
     double *p3 = &radialtable[(m1+2)*(nmax-omin+1)];
     double *p0 = &radialtable[(m1-1)*(nmax-omin+1)];
-    double *q = &dfctable[m1-1];
     double *rinvs = &rinvsqrttable[m1-1];
     r1 = r1-trunc(r1);
-    double dfc = q[1] + 0.5 * r1*(q[2] - q[0] + r1*(2.0*q[0] - 5.0*q[1] + 4.0*q[2] - q[3] + r1*(3.0*(q[1] - q[2]) + q[3] - q[0])));
     double ri = rinvs[1] + 0.5 * r1*(rinvs[2] - rinvs[0] + r1*(2.0*rinvs[0] - 5.0*rinvs[1] + 4.0*rinvs[2] - rinvs[3] + r1*(3.0*(rinvs[1] - rinvs[2]) + rinvs[3] - rinvs[0])));
     for (l=0;l<=(nmax-omin);l++) {
       double rt = p1[l]+0.5*r1*(p2[l]-p0[l]+r1*(2.0*p0[l]-5.0*p1[l]+4.0*p2[l]-p3[l]+r1*(3.0*(p1[l]-p2[l])+p3[l]-p0[l])));
       features[count]+=rt;
-      rt *= (l+omin)/rsq+(-alpha[l]/re+dfc)*ri;
-      //update neighbor's features
-      dfeaturesx[jj*f+count]+=rt*delx;
-      dfeaturesy[jj*f+count]+=rt*dely;
-      dfeaturesz[jj*f+count]+=rt*delz;
-      //update atom's features
-      dfeaturesx[jnum*f+count]-=rt*delx;
-      dfeaturesy[jnum*f+count]-=rt*dely;
-      dfeaturesz[jnum*f+count]-=rt*delz;
+     // rt *= (l+omin)/rsq+(-alpha[l]/re+dfc)*ri;
       count++;
     }
   }

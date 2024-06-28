@@ -74,7 +74,7 @@ void Fingerprint_temperature::init(int *i,int _id)
   id = _id;
 }
 
-void Fingerprint_temperature::compute_fingerprint(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/)
+void Fingerprint_temperature::compute_fingerprint(double * features,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/)
 {
   PairRANN::Simulation *sim = &pair->sims[sid];
   int count=startingneuron;

@@ -2,7 +2,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <sstream>
-
+#include "omp.h"
 #include "utils.h"
 
 using namespace LAMMPS_NS;

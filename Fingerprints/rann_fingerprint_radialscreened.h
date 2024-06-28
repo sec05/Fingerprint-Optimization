@@ -43,13 +43,11 @@ namespace RANN {
     void write_values(FILE *);
     void init(int *, int);
     void allocate();
-    void compute_fingerprint(double *, double *, double *, double *, double *, double *, double *,
-                             double *, double *, double *, double *, bool *, int, int, double *,
+    void compute_fingerprint(double *, double *, bool *, int, int, double *,
                              double *, double *, int *, int, int *);
     int get_length();
 
     double *radialtable;
-    double *dfctable;
     double dr;
     double *alpha;
     double re;

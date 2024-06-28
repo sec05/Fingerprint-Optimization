@@ -9,9 +9,9 @@ void PairRANN::read_file(char *filename)
   FILE *fp;
   int eof = 0;
   std::string line,line1;
-  const int longline = 4096;
+  const long long longline = 1000000000;
   int linenum=0;
-  char linetemp[longline];
+  char* linetemp = new char[longline];
   std::string strtemp;
   char *ptr;
   std::vector<std::string> linev,line1v;
@@ -88,6 +88,7 @@ void PairRANN::read_file(char *filename)
     }
     line=linetemp;
   }
+  delete [] linetemp;
 }
 
 void PairRANN::read_atom_types(std::vector<std::string> line,char *filename,int linenum) {

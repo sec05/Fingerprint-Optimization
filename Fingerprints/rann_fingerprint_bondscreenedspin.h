@@ -44,26 +44,17 @@ namespace RANN {
     void write_values(FILE *);
     void init(int *, int);
     void allocate();
-    void compute_fingerprint(double *, double *, double *, double *, double *, double *,double *, 
-                             double *, double *, double *, double *, double *, double *,
-                             double *, double *, double *, double *, double *, double *, double *,
+    void compute_fingerprint(double *, double *,
                              bool *, int, int, double *, double *, double *, int *, int, int *);
-    void do3bodyfeatureset_doubleneighborloop(double *, double *, double *, double *, double *,
-                                              double *,double *, double *, double *, double *, double *,
-                                              double *, double *, double *, double *, double *,
-                                              double *, double *, double *, double *, bool *, int,
+    void do3bodyfeatureset_doubleneighborloop(double *, double *, bool *, int,
                                               int, double *, double *, double *, int *, int, int *);
-    void do3bodyfeatureset_singleneighborloop(double *, double *, double *, double *, double *,
-                                              double *, double *, double *, double *, double *,
-                                              double *,double *, double *, double *, double *, double *,
-                                              double *, double *, double *, double *, bool *, int,
+    void do3bodyfeatureset_singleneighborloop(double *, double*, bool *, int,
                                               int, double *, double *, double *, int *, int, int *);
     void generate_exp_cut_table();
     void generate_coefficients();
     int get_length();
 
     double *expcuttable;
-    double *dfctable;
     double dr;
     double *alpha_k;
     double re;

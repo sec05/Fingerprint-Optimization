@@ -58,7 +58,6 @@ Fingerprint_bondscreened::~Fingerprint_bondscreened() {
   delete[] alpha_k;
   delete[] atomtypes;
   delete[] expcuttable;
-  delete[] dfctable;
   for (int i=0;i<(mlength*(mlength+1))>>1;i++) {
     delete[] coeff[i];
     delete[] coeffx[i];
@@ -188,17 +187,10 @@ void Fingerprint_bondscreened::generate_exp_cut_table() {
   int res = pair->res;
   double cutmax = pair->cutmax;
   expcuttable = new double[(res+buf)*(kmax)];
-  dfctable = new double[res+buf];
   for (m=0;m<(res+buf);m++) {
     r1 = cutmax*cutmax*(double)(m)/(double)(res);
     for (n=0;n<(kmax);n++) {
       expcuttable[n+m*(kmax)] = exp(-alpha_k[n]/re*sqrt(r1))*cutofffunction(sqrt(r1),rc,dr);
-    }
-    if (sqrt(r1)>=rc || sqrt(r1) <= (rc-dr)) {
-      dfctable[m]=0;
-    }
-    else{
-      dfctable[m]=-8*pow(1-(rc-sqrt(r1))/dr,3)/dr/(1-pow(1-(rc-sqrt(r1))/dr,4));
     }
   }
 }
@@ -295,10 +287,10 @@ void Fingerprint_bondscreened::generate_coefficients() {      //calculates multi
 
 
 //Called by getproperties. Gets 3-body features and dfeatures
-void Fingerprint_bondscreened::compute_fingerprint(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,double *Sik, double *dSikx, double*dSiky, double *dSikz, double *dSijkx, double *dSijky, double *dSijkz, bool *Bij, int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int *jl) {
+void Fingerprint_bondscreened::compute_fingerprint(double * features,double *Sik, bool *Bij, int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int *jl) {
   //select the more efficient algorithm for this particular potential and environment.
   //if (jnum*2>(mlength+1)*mlength*20) {
-    do3bodyfeatureset_singleneighborloop(features,dfeaturesx,dfeaturesy,dfeaturesz,Sik,dSikx,dSiky,dSikz,dSijkx,dSijky,dSijkz,Bij,ii,sid,xn,yn,zn,tn,jnum,jl);
+    do3bodyfeatureset_singleneighborloop(features,Sik,Bij,ii,sid,xn,yn,zn,tn,jnum,jl);
   //}
   //else{
   //  do3bodyfeatureset_doubleneighborloop(features,dfeaturesx,dfeaturesy,dfeaturesz,Sik,dSikx,dSiky,dSikz,dSijkx,dSijky,dSijkz,Bij,ii,sid,xn,yn,zn,tn,jnum,jl);
@@ -307,7 +299,7 @@ void Fingerprint_bondscreened::compute_fingerprint(double * features,double * df
 }
 
 //Called by do3bodyfeatureset. Algorithm for high neighbor numbers and small series of bond angle powers
-void Fingerprint_bondscreened::do3bodyfeatureset_singleneighborloop(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,double *Sik, double *dSikx, double*dSiky, double *dSikz, double *dSijkx, double *dSijky, double *dSijkz, bool *Bij,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/) {
+void Fingerprint_bondscreened::do3bodyfeatureset_singleneighborloop(double * features,double *Sik, bool *Bij,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/) {
   int i,jj,itype,jtype,kk,m,n,mcount,a,a1,a2,ai;
   double delx,dely,delz,rsq;
   int *ilist;
@@ -352,9 +344,7 @@ void Fingerprint_bondscreened::do3bodyfeatureset_singleneighborloop(double * fea
       expr[jj][kk] = p1[kk]+0.5*r1*(p2[kk]-p0[kk]+r1*(2.0*p0[kk]-5.0*p1[kk]+4.0*p2[kk]-p3[kk]+r1*(3.0*(p1[kk]-p2[kk])+p3[kk]-p0[kk])));
       expr[jj][kk] *= Sik[jj];
     }
-    double* q = &dfctable[m1-1];
     double* ri = &rinvsqrttable[m1-1];
-    double dfc = q[1] + 0.5 * r1*(q[2] - q[0] + r1*(2.0*q[0] - 5.0*q[1] + 4.0*q[2] - q[3] + r1*(3.0*(q[1] - q[2]) + q[3] - q[0])));
     double rinvs = ri[1] + 0.5 * r1*(ri[2] - ri[0] + r1*(2.0*ri[0] - 5.0*ri[1] + 4.0*ri[2] - ri[3] + r1*(3.0*(ri[1] - ri[2]) + ri[3] - ri[0])));
 
     expr[jj][p]=delx*rinvs;
@@ -370,13 +360,13 @@ void Fingerprint_bondscreened::do3bodyfeatureset_singleneighborloop(double * fea
     if (expr[jj][p+2]*expr[jj][p+2]<0.000000000001) {
       expr[jj][p+2] = 0.000001;
     }
-    expr[jj][p+3] = -dfc*expr[jj][p]-dSikx[jj];
+    //expr[jj][p+3] = -dfc*expr[jj][p]-dSikx[jj];
     expr[jj][p+4] = rinvs/expr[jj][p];
     expr[jj][p+5] = rinvs*expr[jj][p];
-    expr[jj][p+6] = -dfc*expr[jj][p+1]-dSiky[jj];
+    //expr[jj][p+6] = -dfc*expr[jj][p+1]-dSiky[jj];
     expr[jj][p+7] = rinvs/expr[jj][p+1];
     expr[jj][p+8] = rinvs*expr[jj][p+1];
-    expr[jj][p+9] = -dfc*expr[jj][p+2]-dSikz[jj];
+    //expr[jj][p+9] = -dfc*expr[jj][p+2]-dSikz[jj];
     expr[jj][p+10] = rinvs/expr[jj][p+2];
     expr[jj][p+11] = rinvs*expr[jj][p+2];
   }
@@ -385,12 +375,6 @@ void Fingerprint_bondscreened::do3bodyfeatureset_singleneighborloop(double * fea
   int mb = mlength;
   count = startingneuron;
   double Bb[mb];
-  double dBbx;
-  double dBby;
-  double dBbz;
-  double dBbx1[mb];
-  double dBby1[mb];
-  double dBbz1[mb];
   double yprod;
   for (mcount=0;mcount<countmb;mcount++) {
     int *M = Mf[mcount];
@@ -406,12 +390,6 @@ void Fingerprint_bondscreened::do3bodyfeatureset_singleneighborloop(double * fea
       }
     }
     for (n=0;n<kb;n++) {
-      for (a1=0;a1<mb;a1++) {
-        Bb[a1]=0;
-        dBbx1[a1] = 0;
-        dBby1[a1] = 0;
-        dBbz1[a1] = 0;
-      }
       ai = n;
       double y1 = alpha_k[ai]/re;
       //loop over jtype to get Bb
@@ -476,23 +454,10 @@ void Fingerprint_bondscreened::do3bodyfeatureset_singleneighborloop(double * fea
           ai = n*(mb)+a+count+jj*f;
           for (a2=a;a2<mb;a2++) {
             B1 = Bb[a2]*_coeff[a2]*yprod;
-            dBbx = -B1*(y1*y4[0]+y3[0]-_coeffx[a2]*y3[1]+a2*y3[2]);
-            dBby = -B1*(y1*y4[1]+y3[3]-_coeffy[a2]*y3[4]+a2*y3[5]);
-            dBbz = -B1*(y1*y4[2]+y3[6]-_coeffz[a2]*y3[7]+a2*y3[8]);
-            dBbx1[a2] -= dBbx;
-            dBby1[a2] -= dBby;
-            dBbz1[a2] -= dBbz;
-            dfeaturesx[ai] += dBbx;
-            dfeaturesy[ai] += dBby;
-            dfeaturesz[ai] += dBbz;
+    
             yprod *= y4[M[a2+1]];
             ai++;
-            for (kk=0;kk<jnum;kk++) {
-              //if (Bij[kk]==false) {continue;}
-              dfeaturesx[n*mb+a2+count+kk*f]+=B1*dSijkx[jj*jnum+kk];
-              dfeaturesy[n*mb+a2+count+kk*f]+=B1*dSijky[jj*jnum+kk];
-              dfeaturesz[n*mb+a2+count+kk*f]+=B1*dSijkz[jj*jnum+kk];
-            }
+      
           }
         }
         //loop over jtype to get dBb*Bg
@@ -513,23 +478,8 @@ void Fingerprint_bondscreened::do3bodyfeatureset_singleneighborloop(double * fea
           ai = n*(mb)+a+count+jj*f;
           for (a2=a;a2<mb;a2++) {
             B1 = Bg[a2]*_coeff[a2]*yprod;
-            dBbx = -B1*(y1*y4[0]+y3[0]-_coeffx[a2]*y3[1]+a2*y3[2]);
-            dBby = -B1*(y1*y4[1]+y3[3]-_coeffy[a2]*y3[4]+a2*y3[5]);
-            dBbz = -B1*(y1*y4[2]+y3[6]-_coeffz[a2]*y3[7]+a2*y3[8]);
-            dBbx1[a2] -= dBbx;
-            dBby1[a2] -= dBby;
-            dBbz1[a2] -= dBbz;
-            dfeaturesx[ai] += dBbx;
-            dfeaturesy[ai] += dBby;
-            dfeaturesz[ai] += dBbz;
             yprod *= y4[M[a2+1]];
             ai++;
-            for (kk=0;kk<jnum;kk++) {
-              //if (Bij[kk]==false) {continue;}
-              dfeaturesx[n*mb+a2+count+kk*f]+=B1*dSijkx[jj*jnum+kk];
-              dfeaturesy[n*mb+a2+count+kk*f]+=B1*dSijky[jj*jnum+kk];
-              dfeaturesz[n*mb+a2+count+kk*f]+=B1*dSijkz[jj*jnum+kk];
-            }
           }
         }
         //central atom derivative
@@ -558,23 +508,8 @@ void Fingerprint_bondscreened::do3bodyfeatureset_singleneighborloop(double * fea
           ai = n*(mb)+a+count+jj*f;
           for (a2=a;a2<mb;a2++) {
             B1 = 2*Bb[a2]*_coeff[a2]*yprod;
-            dBbx = -B1*(y1*y4[0]+y3[0]-_coeffx[a2]*y3[1]+a2*y3[2]);
-            dBby = -B1*(y1*y4[1]+y3[3]-_coeffy[a2]*y3[4]+a2*y3[5]);
-            dBbz = -B1*(y1*y4[2]+y3[6]-_coeffz[a2]*y3[7]+a2*y3[8]);
-            dBbx1[a2] -= dBbx;
-            dBby1[a2] -= dBby;
-            dBbz1[a2] -= dBbz;
-            dfeaturesx[ai] += dBbx;
-            dfeaturesy[ai] += dBby;
-            dfeaturesz[ai] += dBbz;
             yprod *= y4[M[a2+1]];
             ai++;
-            for (kk=0;kk<jnum;kk++) {
-              //if (Bij[kk]==false) {continue;}
-              dfeaturesx[n*mb+a2+count+kk*f]+=B1*dSijkx[jj*jnum+kk];
-              dfeaturesy[n*mb+a2+count+kk*f]+=B1*dSijky[jj*jnum+kk];
-              dfeaturesz[n*mb+a2+count+kk*f]+=B1*dSijkz[jj*jnum+kk];
-            }
           }
         }
         //central atom derivative
@@ -589,19 +524,11 @@ void Fingerprint_bondscreened::do3bodyfeatureset_singleneighborloop(double * fea
     //if (Bij[jj]==false) {continue;}
     //if (expr[jj][0]==0) {continue;}
     count = startingneuron;
-    for (n=0;n<kb;n++) {
-      for (m=0;m<mb;m++) {
-        dfeaturesx[jnum*f+count]-=dfeaturesx[jj*f+count];
-        dfeaturesy[jnum*f+count]-=dfeaturesy[jj*f+count];
-        dfeaturesz[jnum*f+count]-=dfeaturesz[jj*f+count];
-        count++;
-      }
-    }
   }
 }
 
 //Called by do3bodyfeatureset. Algorithm for low neighbor numbers and large series of bond angle powers
-void Fingerprint_bondscreened::do3bodyfeatureset_doubleneighborloop(double * features,double * dfeaturesx,double *dfeaturesy,double *dfeaturesz,double *Sik, double *dSikx, double*dSiky, double *dSikz, double *dSijkx, double *dSijky, double *dSijkz, bool *Bij,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/) {
+void Fingerprint_bondscreened::do3bodyfeatureset_doubleneighborloop(double * features,double *Sik, bool *Bij,int ii,int sid,double *xn,double *yn,double*zn,int *tn,int jnum,int * /*jl*/) {
   int i,jj,itype,jtype,ktype,kk,m,n;
   double delx,dely,delz,rsq;
   int *ilist;
@@ -621,7 +548,6 @@ void Fingerprint_bondscreened::do3bodyfeatureset_doubleneighborloop(double * fea
   double expr[jnum][kmax];
   double y[jnum][3];
   double ri[jnum];
-  double dfc[jnum];
   int kb = kmax;
   int mb = mlength;
   double Bijk[kb][mb];
@@ -656,9 +582,7 @@ void Fingerprint_bondscreened::do3bodyfeatureset_doubleneighborloop(double * fea
         expr[jj][kk] = p1[kk]+0.5*r1*(p2[kk]-p0[kk]+r1*(2.0*p0[kk]-5.0*p1[kk]+4.0*p2[kk]-p3[kk]+r1*(3.0*(p1[kk]-p2[kk])+p3[kk]-p0[kk])));
         expr[jj][kk] *= Sik[jj];
     }
-    double* q = &dfctable[m1-1];
     double* r2 = &rinvsqrttable[m1-1];
-    dfc[jj] = q[1] + 0.5 * r1*(q[2] - q[0] + r1*(2.0*q[0] - 5.0*q[1] + 4.0*q[2] - q[3] + r1*(3.0*(q[1] - q[2]) + q[3] - q[0])));
     ri[jj] = r2[1] + 0.5 * r1*(r2[2] - r2[0] + r1*(2.0*r2[0] - 5.0*r2[1] + 4.0*r2[2] - r2[3] + r1*(3.0*(r2[1] - r2[2]) + r2[3] - r2[0])));
     y[jj][0]=delx*ri[jj];
     y[jj][1]=dely*ri[jj];
@@ -671,12 +595,7 @@ void Fingerprint_bondscreened::do3bodyfeatureset_doubleneighborloop(double * fea
     if (jtypes != nelements && jtypes != jtype) {
       continue;
     }
-    for (n = 0;n<kmax;n++) {
-      ct[n] = alpha_k[n]/re;
-      c41[n]=(-ct[n]+dfc[jj])*y[jj][0]+dSikx[jj];
-      c51[n]=(-ct[n]+dfc[jj])*y[jj][1]+dSiky[jj];
-      c61[n]=(-ct[n]+dfc[jj])*y[jj][2]+dSikz[jj];
-    }
+  
     for (n=0;n<kb;n++) {for (m=0;m<mb;m++) {Bijk[n][m]=0;}}
     for (kk=0;kk< jnum; kk++) {
       if (Bij[kk]==false) {continue;}
@@ -698,36 +617,17 @@ void Fingerprint_bondscreened::do3bodyfeatureset_doubleneighborloop(double * fea
         double c4 = c41[n];
         double c5 = c51[n];
         double c6 = c61[n];
-        double ct2 = -ct[n]+dfc[kk];
-        double c42 = ct2*y[kk][0]+dSikx[kk];
-        double c52 = ct2*y[kk][1]+dSiky[kk];
-        double c62 = ct2*y[kk][2]+dSikz[kk];
         //m=0
         Bijk[n][0]+=dot1;
         features[count]+=dot1;
-        dfeaturesx[jj*f+count]+=dot1*c4;
-        dfeaturesy[jj*f+count]+=dot1*c5;
-        dfeaturesz[jj*f+count]+=dot1*c6;
-        dfeaturesx[kk*f+count]+=dot1*c42;
-        dfeaturesy[kk*f+count]+=dot1*c52;
-        dfeaturesz[kk*f+count]+=dot1*c62;
         c4*=dot;
         c5*=dot;
         c6*=dot;
-        c42*=dot;
-        c52*=dot;
-        c62*=dot;
         count++;
         for (m=1;m<mb;m++) {
           double c7 = dot1*(m*c1+c4);
           double c8 = dot1*(m*c2+c5);
           double c9 = dot1*(m*c3+c6);
-          dfeaturesx[jj*f+count]+=c7;
-          dfeaturesy[jj*f+count]+=c8;
-          dfeaturesz[jj*f+count]+=c9;
-          dfeaturesx[kk*f+count]+=dot1*(m*c10+c42);
-          dfeaturesy[kk*f+count]+=dot1*(m*c11+c52);
-          dfeaturesz[kk*f+count]+=dot1*(m*c12+c62);
           dot1*=dot;
           features[count++]+=dot1;
           Bijk[n][m] += dot1;
@@ -742,28 +642,13 @@ void Fingerprint_bondscreened::do3bodyfeatureset_doubleneighborloop(double * fea
         continue;
       }
       count = startingneuron;
-      for (n=0;n<kb;n++) {
-        for (m=0;m<mb;m++) {
-          dfeaturesx[kk*f+count]+=2*Bijk[n][m]*dSijkx[jj*jnum+kk];
-          dfeaturesy[kk*f+count]+=2*Bijk[n][m]*dSijky[jj*jnum+kk];
-          dfeaturesz[kk*f+count]+=2*Bijk[n][m]*dSijkz[jj*jnum+kk];
-          count++;
-        }
-      }
+
     }
   }
   for (jj=0;jj<jnum;jj++) {
     if (Bij[jj]==false) {continue;}
     if (expr[jj][0]==0) {continue;}
     count = startingneuron;
-    for (n=0;n<kb;n++) {
-      for (m=0;m<mb;m++) {
-        dfeaturesx[jnum*f+count]-=dfeaturesx[jj*f+count];
-        dfeaturesy[jnum*f+count]-=dfeaturesy[jj*f+count];
-        dfeaturesz[jnum*f+count]-=dfeaturesz[jj*f+count];
-        count++;
-      }
-    }
   }
 }
 

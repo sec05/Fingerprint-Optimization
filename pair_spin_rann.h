@@ -214,9 +214,9 @@ public:
 	//process_data
 	void read_dump_files();
 	void create_neighbor_lists();
-	void screen(double*,double*,double*,double*,double*,double*,double*,bool*,int,int,double*,double*,double*,int *,int);
+	void screen(double*,bool*,int,int,double*,double*,double*,int *,int);
 	void cull_neighbor_list(double *,double *,double *,int *,int *,int *,int,int,double);
-	void screen_neighbor_list(double *,double *,double *,int *,int *,int *,int,int,bool*,double*,double*,double*,double*,double*,double*,double*);
+	void screen_neighbor_list(double *,double *,double *,int *,int *,int *,int,int,bool*,double*);
 	void compute_fingerprints();
 	void separate_validation();
 	int count_unique_species(int*,int);
