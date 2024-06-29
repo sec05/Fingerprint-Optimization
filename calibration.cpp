@@ -20,7 +20,7 @@ PairRANN::PairRANN(char *potential_file)
 	fingerprints = NULL;
 	max_epochs = 1e7;
 	regularizer = 0.0;
-	res = 10000;
+	res = 1000; // amount of points in the table
 	fingerprintcount = 0;
 	stateequationcount = 0;
 	elementsp = NULL;
@@ -231,7 +231,7 @@ void PairRANN::setup()
 	read_dump_files();
 	create_neighbor_lists();
 	compute_fingerprints();
-	separate_validation();
+	//separate_validation();
 
 	double end_time = omp_get_wtime();
 	double time = (end_time - start_time);
@@ -1517,9 +1517,7 @@ void PairRANN::compute_fingerprints()
 				i = sims[nn].ilist[ii];
 				itype = map[sims[nn].type[i]];
 				f = net[itype].dimensions[0];
-				
-				// AMOUNT OF POINTS TO GENERATE ON THE TABLE???? REVIST
-				jnum = 100;
+				jnum = sims[nn].numneigh[i];
 				// Allocate arrays on the heap
 				double *xn = new double[jnum];
 				double *yn = new double[jnum];
@@ -1861,13 +1859,6 @@ void PairRANN::screen_neighbor_list(double *xn, double *yn, double *zn, int *tn,
 			tnc[count] = tn[jj];
 			jlc[count] = jl[jj];
 			Sikc[count] = Sik[jj];
-			for (kk = 0; kk < jnum[0] - 1; kk++)
-			{
-				if (Bij[kk])
-				{
-					count1++;
-				}
-			}
 			count++;
 		}
 	}

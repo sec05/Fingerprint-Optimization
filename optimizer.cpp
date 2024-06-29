@@ -84,12 +84,11 @@ arma::uvec Optimizer::getKBestColumns(int k)
     printf("getting %d columns\n",k);
     // compute A^TA
     arma::dmat* product = new arma::dmat(fingerprints->n_cols,fingerprints->n_cols); 
-    *product = (arma::trans(*fingerprints) * (*fingerprints));
+    *product = (*fingerprints).t() * (*fingerprints);
     // compute right singular vectors
     arma::dvec singularValues;
     arma::dmat rightSingularVectors;
     arma::eig_sym(singularValues, rightSingularVectors, *product, "dc");
-    arma::blas::
     delete product;
     return DEIM(&rightSingularVectors, k);
 }
