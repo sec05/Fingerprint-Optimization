@@ -39,24 +39,14 @@ arma::dmat *Generator::generate_fingerprint_matrix(int numRadialFingerprints, do
     calibrator = new PairRANN(f);
     calibrator->setup();
     // need to find the matrix size to allocate **FIND BETTER METHOD**
-    int rows = 0;
-    int columns = 0;
+    int rows = calibrator->sims->inum;
+    int columns = calibrator->net[calibrator->map[calibrator->sims[0].type[calibrator->sims[0].ilist[0]]]].dimensions[0];
 
-    for (int n = 0; n < calibrator->nsims; n++)
-    {
-        LAMMPS_NS::PairRANN::Simulation &sim = calibrator->sims[n];
-        for (int i = 0; i < sim.inum; i++)
-        {
-            rows++;
-            columns = calibrator->net[calibrator->map[sim.type[sim.ilist[i]]]].dimensions[0];
-        }
-    }
-
-    // write matrix to file
     // create matrix ******* CHECK SIZE FOR BIGGER INPUTS
     arma::dmat *m = new arma::dmat(rows, columns);
+    
     int r = 0;
-
+    #pragma omp parallel for
     for (int n = 0; n < calibrator->nsims; n++)
     {
         LAMMPS_NS::PairRANN::Simulation &sim = calibrator->sims[n];
@@ -255,11 +245,8 @@ void Generator::generate_opt_inputs()
     }
 
     // now we add on new blocks of radial fingerprints
-    // set up random generation
-    std::random_device rd;
-    std::default_random_engine gen(rd());
-    std::uniform_real_distribution<double> dist(radialFingerprintsLowerBound, radialFingerprintsUpperBound);
-
+    double step = (radialFingerprintsUpperBound-radialFingerprintsLowerBound)/(numRadialFingerprints*alphas);
+    int count = 1;
     // loop and do generation for radial
     for (int i = 0; i < numRadialFingerprints; i++)
     {
@@ -267,11 +254,13 @@ void Generator::generate_opt_inputs()
         std::string generatedAlphas;
         for (int j = o; j <= n; j++)
         {
-            double alpha = dist(gen);
+            double alpha = radialFingerprintsLowerBound+(count*step);
             generatedAlphas += std::to_string(alpha);
             generatedAlphas += j == n ? "" : " ";
             fingerprintsVectorFile << "n=" << j << ", alpha=" << alpha << std::endl;
+            count++;
         }
+        
         // update values in radial keys
         for (int j = 0; j < radialKeys.size(); j++)
         {
@@ -300,12 +289,12 @@ void Generator::generate_opt_inputs()
     }
 
     // write to vector and optimized input file
-    dist = std::uniform_real_distribution<double>(bondFingerprintsLowerBound, bondFingerprintsUpperBound);
+    step = (bondFingerprintsUpperBound-bondFingerprintsLowerBound)/numBondFingerprints;
     std::string alpha_ks = "";
     for (int k = 1; k <= numBondFingerprints; k++)
     {
 
-        double alpha_k = dist(gen);
+        double alpha_k = bondFingerprintsLowerBound+(k*step);
         alpha_ks += std::to_string(alpha_k);
         alpha_ks += k == numBondFingerprints ? "" : " ";
         for (int j = 0; j < m; j++)

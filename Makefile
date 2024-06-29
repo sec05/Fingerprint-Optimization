@@ -14,7 +14,7 @@ TARGET := fingerprint_optimizer
 
 # Define the compiler and compiler flags
 CXX := g++
-CXXFLAGS := -std=c++17 -O2 -shared-libgcc -MMD -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
+CXXFLAGS := -g -std=c++17 -O2 -shared-libgcc -MMD -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
 LDFLAGS := -Xpreprocessor -fopenmp -L/opt/homebrew/opt/libomp/lib -L/opt/homebrew/opt/openblas/lib -L/opt/homebrew/opt/lapack/lib -Wl,-rpath,/opt/homebrew/opt/armadillo/lib
 LDLIBS :=  -lomp -larmadillo -lopenblas -llapack
 
