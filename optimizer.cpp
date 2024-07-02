@@ -1,6 +1,8 @@
 #include "optimizer.h"
 #include "generator.h"
-#include <omp.h>
+#include "NLA.h"
+#include "util.h"
+// #include <omp.h>
 #include <armadillo>
 #include <string>
 #include <vector>
@@ -11,6 +13,7 @@ Optimizer::Optimizer(char *f)
 {
     inputFile = f;
     generator = new Generator(f);
+    std::vector<arma::uvec> selections;
 }
 
 Optimizer::~Optimizer()
@@ -18,102 +21,65 @@ Optimizer::~Optimizer()
     delete generator;
 }
 
-
-arma::dvec GMRES(arma::dmat* A, arma::dvec* b, int k, double tol)
+void Optimizer::getKBestColumns(int k)
 {
-   arma::dmat Q = arma::dmat(b->n_rows,k+1);
-   arma::dmat H = arma::dmat(k+1,k);
-   arma::dvec be1 = arma::dvec(b->n_rows);
-   be1.zeros();
-   be1.at(0) = arma::norm(*b,2);
-   H.zeros();
-   for(int n = 0; n < k; n++){
-        // arnoldi
-        arma::dvec v = (*A)*Q.col(n);
-        for(int j = 0; j <= n; j++){
-            H.at(j,n) = arma::as_scalar(Q.col(j)*v);
-            v -=  H.at(j,n)*Q.col(j);
-        }
-        H.at(n+1,n) = arma::norm(v,2);
-        if(H.at(n+1,n) < tol) break;
-        Q.col(n+1) = v/H.at(n+1,n);
-   }
-    // solve least squares via QR
-        arma::dmat G,R;
-        arma::qr(G,R,H);
-        arma::dvec y;
-        if(b->n_rows == 1) y = arma::solve(R,G.t()*be1.at(0));
-        return Q*y;
-}
-
-
-arma::uvec DEIM(arma::dmat *A, int k)
-{
-
-    arma::uvec selections(k);
-
-    // v = V(:,1)
-    arma::dvec v = A->col(0);
-
-    // p_1 = argmax(|v|)
-    selections[0] = arma::abs(v).index_max();
-    for (int j = 1; j < k; j++)
+    printf("getting %d columns\n", k);
+#pragma omp parallel for
+    for (int i = 0; i < fingerprints.size(); i++)
     {
-        // v = V(:,j)
-        v = A->col(j);
-
-        // c = V(p,1:j-1)^{-1} v(p)
-        arma::dmat subMatrix = A->cols(0, j - 1);
-        subMatrix = subMatrix.rows(selections.rows(0,j-1));
-        arma::dvec cvec = v.rows(selections.rows(0,j-1));
-        arma::dvec c = arma::solve(subMatrix,cvec);
-
-        // r = v - V(p,1:j-1)c
-        subMatrix = A->cols(0, j - 1);
-        arma::dvec r = v - (subMatrix * c);
-
-        // p_j = argmax(|r|)
-        selections[j] = arma::abs(r).index_max();
+        // compute A^TA
+        arma::dmat *product = new arma::dmat(fingerprints.at(i)->n_cols, fingerprints.at(i)->n_cols);
+        *product = (*fingerprints.at(i)).t() * (*fingerprints.at(i));
+        // compute right singular vectors
+        arma::dvec singularValues;
+        arma::dmat rightSingularVectors;
+        arma::eig_sym(singularValues, rightSingularVectors, *product, "dc");
+        delete product;
+        selections.push_back(DEIM(&rightSingularVectors, k));
     }
-
-    return selections;
 }
 
-arma::uvec Optimizer::getKBestColumns(int k)
+void Optimizer::outputVariables(std::string path)
 {
-    printf("getting %d columns\n",k);
-    // compute A^TA
-    arma::dmat* product = new arma::dmat(fingerprints->n_cols,fingerprints->n_cols); 
-    *product = (*fingerprints).t() * (*fingerprints);
-    // compute right singular vectors
-    arma::dvec singularValues;
-    arma::dmat rightSingularVectors;
-    arma::eig_sym(singularValues, rightSingularVectors, *product, "dc");
-    delete product;
-    return DEIM(&rightSingularVectors, k);
-}
-
-std::vector<std::string> Optimizer::returnKColumnVariables(arma::uvec cols)
-{
-    // open variable vector file
-    std::string vector = inputFile;
-    vector += ".optv";
-    vector = "Optimizer Output/" + vector;
-    std::ifstream f;
-    f.open(vector);
-
-    std::vector<std::string> variables;
-    int max = cols.max();
-    for (int i = 0; i <= max; i++)
+    // generate a list of atoms so we know what .optv file to open
+    std::fstream reader;
+    std::string file = inputFile;
+    file+=".opt";
+    file = "./Optimizer Output/"+file;
+    reader.open(file, std::fstream::in);
+    std::string atoms;
+    std::getline(reader, atoms);
+    std::getline(reader, atoms);
+    reader.close();
+    std::ofstream out;
+    out.open(path);
+    std::vector<std::string> atomTypes = LAMMPS_NS::utils::splitString(atoms);
+    for (int i = 0; i < atomTypes.size(); i++)
     {
-        std::string line;
-        std::getline(f, line);
-        arma::uvec inVector = arma::find(cols == i);
-        if (inVector.n_elem != 0)
+        std::string atom = atomTypes.at(i);
+        arma::uvec cols = selections.at(i);
+        // open variable vector file
+        std::string vector = inputFile;
+        vector += "."+atom+".optv";
+        vector = "Optimizer Output/" + vector;
+        std::ifstream f;
+        f.open(vector);
+        std::vector<std::string> variables;
+        int max = cols.max();
+        for (int i = 0; i <= max; i++)
         {
-            variables.push_back(line);
+            std::string line;
+            std::getline(f, line);
+            arma::uvec inVector = arma::find(cols == i);
+            if (inVector.n_elem != 0)
+            {
+                variables.push_back(line);
+            }
+        }
+        out << atom << std::endl;
+        for(std::string variable : variables){
+            out << variable << std::endl;
         }
     }
-
-    return variables;
+    out.close();
 }

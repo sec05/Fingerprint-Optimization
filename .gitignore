@@ -171,4 +171,4 @@ obj
 *.matrix
 *.opt
 *.optv
-data
+*data

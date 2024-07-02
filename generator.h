@@ -16,7 +16,7 @@ namespace OPT
         Generator(char *);
         ~Generator();
 
-        arma::dmat *generate_fingerprint_matrix(int, double, double, int, double, double);
+        std::vector<arma::dmat *> generate_fingerprint_matrix(int, double, double, int, double, double);
         int numRadialFingerprints;
         double radialFingerprintsLowerBound;
         double radialFingerprintsUpperBound;

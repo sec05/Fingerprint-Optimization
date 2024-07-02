@@ -11,11 +11,12 @@ namespace OPT
         Optimizer(char *);
         ~Optimizer();
 
-        arma::dmat *fingerprints;
+        std::vector<arma::dmat *> fingerprints;
         char *inputFile;
         Generator *generator;
+        std::vector<arma::uvec> selections;
 
-        arma::uvec getKBestColumns(int);
-        std::vector<std::string> returnKColumnVariables(arma::uvec);
+        void getKBestColumns(int);
+        void outputVariables(std::string);
     };
 }

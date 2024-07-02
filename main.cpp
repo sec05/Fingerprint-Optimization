@@ -14,17 +14,9 @@
 int main(int argc, char **argv)
 {
 
-	std::ofstream f;
-	f.open("wholeDataSetSelections.txt");
-	auto start = std::chrono::high_resolution_clock::now();
-	OPT::Optimizer *optimizer = new OPT::Optimizer("_Ti.nn");
-	optimizer->fingerprints = optimizer->generator->generate_fingerprint_matrix(500, 0, 1, 500, 0, 1);
-	arma::uvec cols = optimizer->getKBestColumns(50);
-	std::vector<std::string> variables = optimizer->returnKColumnVariables(cols);
-	for(std::string variable : variables) f << variable << std::endl;
-	auto end = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double> elapsed = end - start;
-	f << elapsed.count() << std::endl;
-	f.close();
+	OPT::Optimizer *optimizer = new OPT::Optimizer("NiTi.nn");
+	optimizer->fingerprints = optimizer->generator->generate_fingerprint_matrix(500, 0, 10, 500, 0, 10);
+	optimizer->getKBestColumns(50);
+	optimizer->outputVariables("out.txt");
 	return 0;
 }
