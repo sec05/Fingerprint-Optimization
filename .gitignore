@@ -175,3 +175,4 @@ obj
 
 .DS_STORE
 *.py
+.vscode
