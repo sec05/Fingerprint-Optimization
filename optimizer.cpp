@@ -1,7 +1,7 @@
 #include "optimizer.h"
 #include "generator.h"
 #include "NLA.h"
-#include "util.h"
+#include "utils.h"
 // #include <omp.h>
 #include <armadillo>
 #include <string>
