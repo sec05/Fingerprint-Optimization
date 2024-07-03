@@ -1,6 +1,6 @@
 #include "generator.h"
 #include "utils.h"
-// #include "omp.h"
+#include "omp.h"
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -44,7 +44,8 @@ std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFi
     // create a list of rows x cols for each matrix
     std::vector<int> rows(networks, 0);
     std::vector<int> columns(networks, 0);
-
+    
+    #pragma omp parallel for
     for (int n = 0; n < calibrator->nsims; n++)
     {
         LAMMPS_NS::PairRANN::Simulation &sim = calibrator->sims[n];
@@ -65,7 +66,7 @@ std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFi
     }
 
     std::vector<int> cursor(rows.size(), 0);
-#pragma omp parallel for
+    #pragma omp parallel for
     for (int n = 0; n < calibrator->nsims; n++)
     {
         LAMMPS_NS::PairRANN::Simulation &sim = calibrator->sims[n];

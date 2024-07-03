@@ -172,3 +172,6 @@ obj
 *.opt
 *.optv
 *data
+
+.DS_STORE
+*.py
