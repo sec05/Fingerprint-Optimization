@@ -23,19 +23,10 @@ Optimizer::~Optimizer()
 
 void Optimizer::getKBestColumns(int k)
 {
-    printf("getting %d columns\n", k);
-#pragma omp parallel for
+    printf("Getting %d best columns\n", k);
     for (int i = 0; i < fingerprints.size(); i++)
     {
-        // compute A^TA
-        arma::dmat *product = new arma::dmat(fingerprints.at(i)->n_cols, fingerprints.at(i)->n_cols);
-        *product = (*fingerprints.at(i)).t() * (*fingerprints.at(i));
-        // compute right singular vectors
-        arma::dvec singularValues;
-        arma::dmat rightSingularVectors;
-        arma::eig_sym(singularValues, rightSingularVectors, *product, "dc");
-        delete product;
-        selections.push_back(DEIM(&rightSingularVectors, k));
+        selections.push_back(selectByImportanceScore(fingerprints.at(i),k));
     }
 }
 

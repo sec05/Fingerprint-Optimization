@@ -45,7 +45,6 @@ std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFi
     std::vector<int> rows(networks, 0);
     std::vector<int> columns(networks, 0);
     
-    #pragma omp parallel for
     for (int n = 0; n < calibrator->nsims; n++)
     {
         LAMMPS_NS::PairRANN::Simulation &sim = calibrator->sims[n];
@@ -66,7 +65,6 @@ std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFi
     }
 
     std::vector<int> cursor(rows.size(), 0);
-    #pragma omp parallel for
     for (int n = 0; n < calibrator->nsims; n++)
     {
         LAMMPS_NS::PairRANN::Simulation &sim = calibrator->sims[n];
@@ -105,7 +103,12 @@ void Generator::generate_opt_inputs()
     }
     std::vector<std::string> atomTypes = utils::splitString((*inputTable)[atomTypesIndex].second);
     printf("Generator: found %zu atom types!\n", atomTypes.size());
-
+    //create/clean atom types .optv files
+    for(std::string atom : atomTypes){
+        std::ofstream f;
+        f.open("./Optimizer Output/"+inputFile+"."+atom+".optv");
+        f.close();
+    }
     // make sure number of fingerprints is number we are going to generate for each atom
     int numAtoms = atomTypes.size();
     for (std::string atom : atomTypes)
@@ -266,20 +269,25 @@ void Generator::generate_opt_inputs()
         bondCombinationTemplateValues.push_back(bondValues);
     }
 
+    std::vector<int> totalRadial = std::vector<int>(atomTypes.size());
+    std::vector<int> totalBond = std::vector<int>(atomTypes.size());
+
     // need to update the layer 0 size
+    int counter = 0;
     for (std::string atom : atomTypes)
     {
         int layer0Index = utils::searchTable("layersize:" + atom + ":0:", inputTable);
         int size = 0;
 
-        // iterate through combinations finding the amount of input for each atom type
+        // iterate through combinations finding the amount of input for each atom type 
         for (int i = 0; i < radialCombinations.size(); i++)
-        {
+        { 
             std::string combinationType = radialCombinations.at(i);
             combinationType = combinationType.substr(0, combinationType.find_first_of('_'));
             if (combinationType == atom)
             {
                 size += alphas.at(i) * numRadialFingerprints;
+                totalRadial.at(counter) +=  alphas.at(i) * numRadialFingerprints;
             }
         }
 
@@ -290,9 +298,10 @@ void Generator::generate_opt_inputs()
             if (combinationType == atom)
             {
                 size += ms.at(i) * numBondFingerprints;
+                totalBond.at(counter) += ms.at(i) * numBondFingerprints;
             }
         }
-
+        counter++;
         inputTable->at(layer0Index).second = std::to_string(size);
     }
 
@@ -343,7 +352,7 @@ void Generator::generate_opt_inputs()
 
     delete inputTable;
 
-    // open file to write generated columns
+    // open file to write generated columns and clean it
     std::ofstream fingerprintsVectorFile;
 
     // now we add on new blocks of radial fingerprints
@@ -461,6 +470,11 @@ void Generator::generate_opt_inputs()
     {
         delete bondCombinationTemplateKeys.at(i);
         delete bondCombinationTemplateValues.at(i);
+    }
+
+    // finally we print out the lotal amount of radial and bonds generated for each element
+    for(int i  = 0; i < atomTypes.size(); i++){
+        printf("%s: Generated %d radial and %d bond fingerprints.\n",atomTypes.at(i).c_str(),totalRadial.at(i),totalBond.at(i));
     }
 }
 
