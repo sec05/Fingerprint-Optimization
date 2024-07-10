@@ -14,8 +14,8 @@ TARGET := fingerprint_optimizer
 
 # Define the compiler and compiler flags
 CXX := g++
-CXXFLAGS := -g -std=c++17 -O2 -shared-libgcc -MMD -fopenmp -I $(HOME)/Work/usr/include
-LDFLAGS := -fopenmp -L $(HOME)/Work/usr/lib64 -Wl,-rpath=$(HOME)/Work/usr/lib64
+CXXFLAGS := -g -std=c++17 -O2 -shared-libgcc -MMD -fopenmp -I $(HOME)/work/usr/include
+LDFLAGS := -fopenmp -L $(HOME)/work/usr/lib64 -Wl,-rpath=$(HOME)/work/usr/lib64
 LDLIBS := -larmadillo
 
 # Define the object files (with paths relative to OBJ_DIR)
