@@ -80,7 +80,8 @@ std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFi
         }
     }
 
-    delete calibrator;
+    delete calibrator->sims;
+    delete calibrator->net;
     delete[] f;
     return matrices;
 }

@@ -139,17 +139,19 @@ arma::uvec QDEIM(arma::dmat *A, int k, double tol)
 arma::uvec selectByImportanceScore(arma::dmat *A, int k)
 {
     arma::uvec selections(k, arma::fill::zeros);
+
     for (int n = 0; n < k; n++)
     {
         arma::dvec scores(A->n_cols, arma::fill::zeros);
 
-        // calculate right singular vectors of A
+        /* divide and conquer method*/
         arma::dvec singularValues;
         arma::dmat rightSingularVectors;
         arma::dmat product = (*A).t() * (*A);
         arma::eig_sym(singularValues, rightSingularVectors, product);
 
         // calcaulte importance scores of right singular vectors
+        #pragma omp parallel for
         for (int j = 0; j < A->n_cols; j++)
         {
             scores.at(j) = 0;
@@ -158,9 +160,49 @@ arma::uvec selectByImportanceScore(arma::dmat *A, int k)
                 scores.at(j) += rightSingularVectors.at(i, j) * rightSingularVectors.at(i, j);
             }
         }
+
+        /* shifted qr method
+        arma::dmat P = A->t() * (*A);
+        printf("Kappa P = %f\n", arma::cond(P));
+        arma::dmat I, Q, R;
+        arma::dvec q(P.n_rows, arma::fill::randn);
+        double a, b, c, d, delta = 0;
+        int signDelta = 1;
+        q /= arma::norm(q, 2);
+
+        for (int i = 0; i < 40; i++)
+        {
+            if (arma::approx_equal(P, arma::trimatu(P), "absdiff", 1e-10))
+                break;
+
+            // compute Wilkinson shift
+            a = P(P.n_cols - 2, P.n_cols - 2);
+            b = P(P.n_cols - 2, P.n_cols - 1);
+            c = P(P.n_cols - 1, P.n_cols - 2);
+            d = P(P.n_cols - 1, P.n_cols - 1);
+            delta = (a - d) / 2;
+            if (delta < 0)
+                signDelta = -1;
+            double shift = (d - (signDelta * b * b)) / (abs(delta) + sqrt((delta * delta) + (c * c)));
+
+            // rayleigh quotient shift
+            //double shift = arma::dot(q,P*q);
+
+            I = arma::dmat(P.n_cols, P.n_cols, arma::fill::eye) * shift;
+            P -= I;
+            arma::qr(Q, R, P);
+            P = R * Q + I;
+            q = P * q;
+            q /= arma::norm(q);
+        }
+
+        for (int i = 0; i < P.n_cols; i++)
+            scores(i) = q(i) * q(i);
+            */
+
         for (int i = 0; i <= n; i++)
             scores.at(selections.at(i)) = INT64_MIN;
-        // for(int i = 0; i < n; i++) scores(selections.at(i)) = 0;
+
         //  Get best column
         int l = scores.index_max();
         selections.at(n) = l;
@@ -170,6 +212,7 @@ arma::uvec selectByImportanceScore(arma::dmat *A, int k)
         double colLNorm = arma::dot(A_l, A_l);
         if (colLNorm == 0)
             continue;
+        #pragma omp parallel for
         for (int j = 0; j < A->n_cols; j++)
         {
             if (arma::norm(A->col(j)) == 0)
@@ -202,6 +245,7 @@ arma::uvec selectByImportanceScore(arma::dmat *A, int k)
         }*/
 
         double sum = 0;
+        #pragma omp parallel for
         for (int j = 0; j < A->n_cols; j++)
         {
             bool shouldSkip = false;
