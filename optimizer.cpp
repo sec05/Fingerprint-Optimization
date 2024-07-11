@@ -56,16 +56,21 @@ void Optimizer::outputVariables(std::string path)
         std::ifstream f;
         f.open(vector);
         std::vector<std::string> variables;
-        int max = cols.max();
-        for (int i = 0; i <= max; i++)
+        for (int i = 0; i < cols.n_elem; i++)
         {
             std::string line;
-            std::getline(f, line);
-            arma::uvec inVector = arma::find(cols == i);
-            if (inVector.n_elem != 0)
-            {
-                variables.push_back(line);
+            int entry = 0;
+            while(std::getline(f, line)){
+                if(cols.at(i) == entry) 
+                {
+                    variables.push_back(line);
+                    break;
+                }
+                else{
+                    entry++;
+                }
             }
+            f.seekg(0);
         }
         out << atom << std::endl;
         for(std::string variable : variables){
