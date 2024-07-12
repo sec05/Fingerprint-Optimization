@@ -220,6 +220,7 @@ public:
 	void compute_fingerprints();
 	void separate_validation();
 	int count_unique_species(int*,int);
+	void normalize_data();
 
 	//handle network
 	void create_random_weights(int,int,int,int,int);

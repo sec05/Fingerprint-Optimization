@@ -1619,6 +1619,95 @@ void PairRANN::compute_fingerprints()
 	}
 }
 
+void PairRANN::normalize_data(){
+	int i,n,ii,j,itype;
+	int natoms[nelementsp];
+	normalgain = new double *[nelementsp];
+	normalshift = new double *[nelementsp];
+	//initialize
+	for (i=0;i<nelementsp;i++){
+		if (net[i].layers==0)continue;
+		normalgain[i] = new double [net[i].dimensions[0]];
+		normalshift[i] = new double [net[i].dimensions[0]];
+		for (j=0;j<net[i].dimensions[0];j++){
+			normalgain[i][j]=0;
+			normalshift[i][j]=0;
+		}
+		natoms[i] = 0;
+	}
+	//get mean value of each 1st layer neuron input
+	for (n=0;n<nsims;n++){
+		for (ii=0;ii<sims[n].inum;ii++){
+			itype = sims[n].type[ii];
+			natoms[itype]++;
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					normalshift[itype][j]+=sims[n].features[ii][j];
+				}
+			}
+			itype = nelements;
+			natoms[itype]++;
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					normalshift[itype][j]+=sims[n].features[ii][j];
+				}
+			}
+		}
+	}
+	for (i=0;i<nelementsp;i++){
+		if (net[i].layers==0)continue;
+		for (j=0;j<net[i].dimensions[0];j++){
+			normalshift[i][j]/=natoms[i];
+		}
+	}
+	//get standard deviation
+	for (n=0;n<nsims;n++){
+		for (ii=0;ii<sims[n].inum;ii++){
+			itype = sims[n].type[ii];
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					normalgain[itype][j]+=(sims[n].features[ii][j]-normalshift[itype][j])*(sims[n].features[ii][j]-normalshift[itype][j]);
+				}
+			}
+			itype = nelements;
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					normalshift[itype][j]+=(sims[n].features[ii][j]-normalshift[itype][j])*(sims[n].features[ii][j]-normalshift[itype][j]);
+				}
+			}
+		}
+	}
+	for (i=0;i<nelementsp;i++){
+		if (net[i].layers==0)continue;
+		for (j=0;j<net[i].dimensions[0];j++){
+			normalgain[i][j]=sqrt(normalgain[i][j]/natoms[i]);
+		}
+	}
+	//shift input to mean=0, std = 1
+	for (n=0;n<nsims;n++){
+		for (ii=0;ii<sims[n].inum;ii++){
+			itype = sims[n].type[ii];
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					if (normalgain[itype][j]>0){
+						sims[n].features[ii][j] -= normalshift[itype][j];
+						sims[n].features[ii][j] /= normalgain[itype][j];
+					}
+				}
+			}
+			itype = nelements;
+			if (net[itype].layers!=0){
+				for (j=0;j<net[itype].dimensions[0];j++){
+					if (normalgain[itype][j]>0){
+						sims[n].features[ii][j] -= normalshift[itype][j];
+						sims[n].features[ii][j] /= normalgain[itype][j];
+					}
+				}
+			}
+		}
+	}
+}
+
 void PairRANN::unnormalize_net(NNarchitecture *net_out)
 {
 	int i, j, k;

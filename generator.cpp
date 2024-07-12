@@ -38,6 +38,7 @@ std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFi
     std::strcpy(f, temp.c_str());
     calibrator = new PairRANN(f);
     calibrator->setup();
+    calibrator->normalize_data();
     // need to find the matrix size to allocate **FIND BETTER METHOD**
     int networks = calibrator->nelements;
 
@@ -56,6 +57,8 @@ std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFi
             columns.at(index) = calibrator->net[index].dimensions[0];
         }
     }
+
+    //calibrator->normalize_data();
 
     // create matrices
     std::vector<arma::dmat *> matrices;
