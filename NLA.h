@@ -1,6 +1,6 @@
 #include <armadillo>
 #include <random>
-//#include "omp.h"
+// #include "omp.h"
 
 arma::dvec GMRES(arma::dmat *A, arma::dvec *b, int k, double tol)
 {
@@ -138,7 +138,7 @@ arma::uvec QDEIM(arma::dmat *A, int k, double tol)
     return DEIM(&R, kk);
 }
 
-arma::uvec selectByImportanceScore(arma::dmat *A, int k, int ms, int offset)
+arma::uvec selectByImportanceScore(arma::dmat *A, int k, int ms, int offset, int mode = 1)
 {
     arma::uvec selections(k, arma::fill::zeros);
 
@@ -153,15 +153,17 @@ arma::uvec selectByImportanceScore(arma::dmat *A, int k, int ms, int offset)
 
         arma::eig_sym(singularValues, rightSingularVectors, product);
 
-        // calcaulte importance scores of right singular vectors
-        #pragma omp parallel for
+// calcaulte importance scores of right singular vectors
+#pragma omp parallel for
         for (int j = 0; j < A->n_cols; j++)
         {
             scores.at(j) = 0;
-            for (int i = 0; i < k-n; i++)
+            for (int i = 0; i < k - n; i++)
             {
-                if(j >= offset)  scores.at(j) += (rightSingularVectors.at(j,i) * rightSingularVectors.at(j,i))/ms;
-                else scores.at(j) += (rightSingularVectors.at(j,i) * rightSingularVectors.at(j,i));
+                if (j >= offset)
+                    scores.at(j) += (rightSingularVectors.at(j, i) * rightSingularVectors.at(j, i)) / ms;
+                else
+                    scores.at(j) += (rightSingularVectors.at(j, i) * rightSingularVectors.at(j, i));
             }
         }
 
@@ -174,57 +176,45 @@ arma::uvec selectByImportanceScore(arma::dmat *A, int k, int ms, int offset)
         arma::dvec A_l = A->col(l);
 
         // Perform Gram-Schmidt
-        double colLNorm = arma::dot(A_l, A_l);
-        if (colLNorm == 0)
-            continue;
-        #pragma omp parallel for
-        for (int j = 0; j < A->n_cols; j++)
+        if (mode == 1)
         {
-            if (arma::norm(A->col(j)) == 0)
+            double colLNorm = arma::dot(A_l, A_l);
+            if (colLNorm == 0)
                 continue;
-            for (int i = 0; i <= n; i++)
-                if (selections.at(i) == j)
+#pragma omp parallel for
+            for (int j = 0; j < A->n_cols; j++)
+            {
+                if (arma::norm(A->col(j)) == 0)
                     continue;
-            arma::dvec A_l = A->col(l);
-            A->col(j) -= A_l * (arma::dot(A_l, A->col(j)) / colLNorm);
+                for (int i = 0; i <= n; i++)
+                    if (selections.at(i) == j)
+                        continue;
+                arma::dvec A_l = A->col(l);
+                A->col(j) -= A_l * (arma::dot(A_l, A->col(j)) / colLNorm);
+            }
         }
 
         // householder method
-        /*for (int i = 0; i < A->n_cols; i++)
+        if (mode == 2)
         {
-            bool shouldSkip = false;
-            for (int k = 0; k <= n; k++)
+            for (int i = 0; i < A->n_cols; i++)
             {
-                if (selections.at(k) == i)
+                bool shouldSkip = false;
+                for (int k = 0; k <= n; k++)
                 {
-                    shouldSkip = true;
-                    break;
+                    if (selections.at(k) == i)
+                    {
+                        shouldSkip = true;
+                        break;
+                    }
                 }
+                if (shouldSkip)
+                    continue;
+                double alpha = arma::dot(A_l, A->col(i)) / arma::dot(A_l, A_l);
+                arma::dvec u = A->col(i) - alpha * A->col(i);
+                u /= arma::norm(u, 2);
+                A->col(i) -= 2 * (u * arma::dot(u, A->col(i)));
             }
-            if (shouldSkip)
-                continue;
-            double alpha = arma::dot(A_l, A->col(i)) / arma::dot(A_l, A_l);
-            arma::dvec u = A->col(i) - alpha * A->col(i);
-            u /= arma::norm(u, 2);
-            A->col(i) -= 2 * (u * arma::dot(u, A->col(i)));
-        }*/
-
-        double sum = 0;
-        #pragma omp parallel for
-        for (int j = 0; j < A->n_cols; j++)
-        {
-            bool shouldSkip = false;
-            for (int k = 0; k <= n; k++)
-            {
-                if (selections.at(k) == j)
-                {
-                    shouldSkip = true;
-                    break;
-                }
-            }
-            if (shouldSkip)
-                continue;
-            sum += arma::dot(A_l, A->col(j));
         }
     }
     selections.save("selections.txt", arma::raw_ascii);
@@ -263,77 +253,84 @@ arma::uvec farthestPointSampling(arma::dmat *A, int k)
     return selections;
 }
 
-arma::dmat** randomizedSVD(arma::dmat* A, int k, int q){
+arma::dmat **randomizedSVD(arma::dmat *A, int k, int q)
+{
     // over sampling parameter
-    int l = 2*k;
+    int l = 2 * k;
 
     // want to randomly sample all columns of A l times
-    arma::dmat Y(A->n_rows,l,arma::fill::zeros);
-    
+    arma::dmat Y(A->n_rows, l, arma::fill::zeros);
+
     // setting up random generation
     std::random_device rd;
     std::mt19937 e2(rd());
     std::normal_distribution<> dist(0, 1);
 
-    #pragma omp parallel for
-    for(int i = 0; i < l; i++){
-        for(int j = 0; j < A->n_cols; j++){
+#pragma omp parallel for
+    for (int i = 0; i < l; i++)
+    {
+        for (int j = 0; j < A->n_cols; j++)
+        {
             Y.col(i) += dist(e2) * A->col(j);
         }
     }
-    // using the power iteration method 
+    // using the power iteration method
     arma::dmat P = (*A) * A->t();
-    for(int i = 0; i < q; i++) P *= P;
+    for (int i = 0; i < q; i++)
+        P *= P;
 
     Y = P * Y;
 
     // find Q
-    arma::dmat Q,R;
-    arma::qr(Q,R,Y);
+    arma::dmat Q, R;
+    arma::qr(Q, R, Y);
 
     // form small matrix B
     arma::dmat B = Q.t() * (*A);
 
     // take SVD of B
-    arma::dmat* U_hat = new arma::dmat();
-    arma::dmat* V = new arma::dmat(); 
+    arma::dmat *U_hat = new arma::dmat();
+    arma::dmat *V = new arma::dmat();
     arma::dvec S;
-    arma::svd(*U_hat,S,*V,B);;
+    arma::svd(*U_hat, S, *V, B);
+    ;
 
     // form Q
-    arma::dmat* U = new arma::dmat();
+    arma::dmat *U = new arma::dmat();
     (*U) = Q * (*U_hat);
-    
-    arma::dmat** r = (arma::dmat**)malloc(2*sizeof(arma::dmat*));
+
+    arma::dmat **r = (arma::dmat **)malloc(2 * sizeof(arma::dmat *));
     r[0] = U;
     r[1] = V;
     return r;
-
 }
 
-arma::dmat BSSSampling(arma::dmat& V, arma::dmat& R, int r, arma::uvec& selections){
+arma::dmat BSSSampling(arma::dmat &V, arma::dmat &R, int r, arma::uvec &selections)
+{
     // setup for algorithm
     int n = V.n_rows;
     int k = V.n_cols;
-    arma::dvec s(n,arma::fill::zeros);
-    arma::dmat S(n,r,arma::fill::zeros);
+    arma::dvec s(n, arma::fill::zeros);
+    arma::dmat S(n, r, arma::fill::zeros);
 
-    arma::dvec scores = arma::sum(arma::square(V),1);
+    arma::dvec scores = arma::sum(arma::square(V), 1);
 
-    double threshold = std::sqrt(static_cast<double>(k)/r);
+    double threshold = std::sqrt(static_cast<double>(k) / r);
 
     std::vector<std::pair<double, int>> scoreIndices;
 
-    for(int i = 0; i < n; i++){
+    for (int i = 0; i < n; i++)
+    {
         scoreIndices.push_back(std::make_pair(scores(i), i));
     }
 
-    std::sort(scoreIndices.begin(), scoreIndices.end(),std::greater<std::pair<double, int>>());
+    std::sort(scoreIndices.begin(), scoreIndices.end(), std::greater<std::pair<double, int>>());
 
-    for(int i = 0; i < r; i++){
+    for (int i = 0; i < r; i++)
+    {
         int index = scoreIndices[i].second;
-        s(index) = 1.0/(double)r;
-        S(index,i) = std::sqrt(s(index));
+        s(index) = 1.0 / (double)r;
+        S(index, i) = std::sqrt(s(index));
         selections(i) = index;
     }
 
@@ -342,33 +339,38 @@ arma::dmat BSSSampling(arma::dmat& V, arma::dmat& R, int r, arma::uvec& selectio
 
     arma::dvec ew;
     arma::eig_sym(ew, VTS * VTS.t());
-    if(ew.min() < 1 -threshold) printf("Spectral condition not met\n");
-    if(arma::norm(RTS,"fro") > arma::norm(R,"fro")) printf("Frobenius condition not met\n");
+    if (ew.min() < 1 - threshold)
+        printf("Spectral condition not met\n");
+    if (arma::norm(RTS, "fro") > arma::norm(R, "fro"))
+        printf("Frobenius condition not met\n");
 
     return S;
 }
 
-arma::dmat adaptiveCols(arma::dmat& A, arma::dmat& V, double alpha, int c, arma::uvec& selections, int offset){
+arma::dmat adaptiveCols(arma::dmat &A, arma::dmat &V, double alpha, int c, arma::uvec &selections, int offset)
+{
     // compute residual
     arma::dmat B = A - V * arma::pinv(V) * A;
 
     // calculate leverage scores for each row
     std::vector<double> ps;
 
-    double froNorm = arma::norm(B,"fro");
+    double froNorm = arma::norm(B, "fro");
     froNorm *= froNorm;
-    //#pragma omp parallel for
-    for(int i = 0; i < A.n_cols; i++){
+    // #pragma omp parallel for
+    for (int i = 0; i < A.n_cols; i++)
+    {
         double l = arma::norm(B.col(i));
         l *= l;
-        ps.push_back(l/froNorm);
+        ps.push_back(l / froNorm);
     }
     double sum = 0;
 
-    for(double p : ps){
+    for (double p : ps)
+    {
         sum += p;
     }
-   
+
     // assemble leverage score CDF
     std::vector<double> cdf(ps.size());
     std::partial_sum(ps.begin(), ps.end(), cdf.begin());
@@ -377,36 +379,38 @@ arma::dmat adaptiveCols(arma::dmat& A, arma::dmat& V, double alpha, int c, arma:
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis(0.0, 1.0);
-    
-    arma::dmat C(A.n_rows,c,arma::fill::zeros);
 
-    //#pragma omp parallel for
-    for(int i = 0; i < c; i++){
+    arma::dmat C(A.n_rows, c, arma::fill::zeros);
+
+    // #pragma omp parallel for
+    for (int i = 0; i < c; i++)
+    {
         double randomValue = dis(gen);
         auto it = std::lower_bound(cdf.begin(), cdf.end(), randomValue);
         int index = std::distance(cdf.begin(), it);
         C.col(i) = A.col(index);
-        selections(i+offset) = index;
+        selections(i + offset) = index;
     }
 
     return C;
 }
 
-arma::uvec deterministicCUR(arma::dmat* A, int k){
-    if(k > arma::rank(*A)) printf("k given is greater than rank(A)! rank(A) = %d \n",arma::rank(*A));
-    arma::uvec selections(k,arma::fill::value(-1));
+arma::uvec deterministicCUR(arma::dmat *A, int k)
+{
+    if (k > arma::rank(*A))
+        printf("k given is greater than rank(A)! rank(A) = %d \n", arma::rank(*A));
+    arma::uvec selections(k, arma::fill::value(-1));
     // deterministic SVD
     arma::dmat U, V, E;
     arma::dvec s;
-    arma::svd(U,s,V,*A);
-    V = V.cols(0,k-1);
-    E = (*A) - (*A)*V*V.t();
+    arma::svd(U, s, V, *A);
+    V = V.cols(0, k - 1);
+    E = (*A) - (*A) * V * V.t();
     E = E.t();
 
-    arma::dmat S = BSSSampling(V,E,k/2,selections);
+    arma::dmat S = BSSSampling(V, E, k / 2, selections);
     arma::dmat C1 = (*A) * S;
-    arma::dmat C2 = adaptiveCols(*A,C1,1,k/2,selections,k/2);
-    selections.save("selections.txt",arma::raw_ascii);
+    arma::dmat C2 = adaptiveCols(*A, C1, 1, k / 2, selections, k / 2);
+    selections.save("selections.txt", arma::raw_ascii);
     return selections;
-    
 }
