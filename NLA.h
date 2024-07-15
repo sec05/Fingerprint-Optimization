@@ -1,6 +1,6 @@
 #include <armadillo>
 #include <random>
-// #include "omp.h"
+#include "omp.h"
 
 arma::dvec GMRES(arma::dmat *A, arma::dvec *b, int k, double tol)
 {
@@ -154,14 +154,13 @@ arma::uvec selectByImportanceScore(arma::dmat *A, int k, int ms, int offset, int
         arma::eig_sym(singularValues, rightSingularVectors, product);
 
 // calcaulte importance scores of right singular vectors
-#pragma omp parallel for
         for (int j = 0; j < A->n_cols; j++)
         {
             scores.at(j) = 0;
             for (int i = 0; i < k - n; i++)
             {
                 if (j >= offset)
-                    scores.at(j) += (rightSingularVectors.at(j, i) * rightSingularVectors.at(j, i)) / ms;
+                    scores.at(j) += (rightSingularVectors.at(j, i) * rightSingularVectors.at(j, i)) / ((ms-((j-offset)%ms))*(ms-((j-offset)%ms)));
                 else
                     scores.at(j) += (rightSingularVectors.at(j, i) * rightSingularVectors.at(j, i));
             }
@@ -169,7 +168,7 @@ arma::uvec selectByImportanceScore(arma::dmat *A, int k, int ms, int offset, int
 
         for (int i = 0; i <= n; i++)
             scores.at(selections.at(i)) = INT64_MIN;
-
+        scores.save("scores"+std::to_string(n)+".txt",arma::raw_ascii);
         //  Get best column
         int l = scores.index_max();
         selections.at(n) = l;

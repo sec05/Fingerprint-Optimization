@@ -6,7 +6,7 @@
 #include <regex>
 #include <sstream>
 #include <random>
-
+//bug where if theres nit a comment at the top it wont read the file
 using namespace OPT;
 using namespace LAMMPS_NS;
 
