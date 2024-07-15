@@ -141,15 +141,9 @@ arma::uvec QDEIM(arma::dmat *A, int k, double tol)
 arma::uvec selectByImportanceScore(arma::dmat *A, int k)
 {
     arma::uvec selections(k, arma::fill::zeros);
-    std::ofstream f;
-    f.open("cond.colnorm.txt");
+
     for (int n = 0; n < k; n++)
     {
-
-       // Column normalization preconditioner
-       *A = arma::normalise(*A,2);
-
-       f << "n = " << std::to_string(n) << " k(A) = " << std::to_string(arma::cond(*A)) << std::endl; 
         arma::dvec scores(A->n_cols, arma::fill::zeros);
 
         /* divide and conquer method*/
