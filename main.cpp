@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 
 	OPT::Optimizer *optimizer = new OPT::Optimizer("Bi.nn");
 	optimizer->fingerprints = optimizer->generator->generate_fingerprint_matrix(100, 0, 10, 125, 0, 10);
-	optimizer->getKBestColumns(50);
+	optimizer->getKBestColumns(20);
 	optimizer->outputVariables("out.txt");
 	return 0;
 }
