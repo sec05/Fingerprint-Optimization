@@ -1,6 +1,6 @@
 #include "generator.h"
 #include "utils.h"
-#include "omp.h"
+//#include "omp.h"
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -38,7 +38,7 @@ std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFi
     std::strcpy(f, temp.c_str());
     calibrator = new PairRANN(f);
     calibrator->setup();
-    //calibrator->normalize_data();
+    calibrator->normalize_data();
     // need to find the matrix size to allocate **FIND BETTER METHOD**
     int networks = calibrator->nelements;
 
@@ -215,7 +215,6 @@ void Generator::generate_opt_inputs()
     std::vector<std::vector<std::string> *> bondCombinationTemplateKeys;
     std::vector<std::vector<std::string> *> bondCombinationTemplateValues;
 
-    std::vector<int> ms;
     std::vector<int> alpha_kIndices;
 
     for (std::string combination : bondCombinations)
@@ -273,8 +272,8 @@ void Generator::generate_opt_inputs()
         bondCombinationTemplateValues.push_back(bondValues);
     }
 
-    std::vector<int> totalRadial = std::vector<int>(atomTypes.size());
-    std::vector<int> totalBond = std::vector<int>(atomTypes.size());
+    totalRadial = std::vector<int>(atomTypes.size());
+    totalBond = std::vector<int>(atomTypes.size());
 
     // need to update the layer 0 size
     int counter = 0;

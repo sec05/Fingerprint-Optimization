@@ -26,7 +26,7 @@ void Optimizer::getKBestColumns(int k)
     printf("Getting %d best columns\n", k);
     for (int i = 0; i < fingerprints.size(); i++)
     {
-        selections.push_back(DEIM(fingerprints.at(i),k));
+        selections.push_back(selectByImportanceScore(fingerprints.at(i),k,generator->ms.at(i),generator->totalRadial.at(i)));
     }
 }
 

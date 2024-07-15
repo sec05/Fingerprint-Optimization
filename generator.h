@@ -23,7 +23,7 @@ namespace OPT
         int numBondFingerprints;
         double bondFingerprintsLowerBound;
         double bondFingerprintsUpperBound;
-
+        std::vector<int> ms, totalRadial, totalBond;
     private:
         LAMMPS_NS::PairRANN *calibrator;
         std::string inputFile;

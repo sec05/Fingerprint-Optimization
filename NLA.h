@@ -138,7 +138,7 @@ arma::uvec QDEIM(arma::dmat *A, int k, double tol)
     return DEIM(&R, kk);
 }
 
-arma::uvec selectByImportanceScore(arma::dmat *A, int k)
+arma::uvec selectByImportanceScore(arma::dmat *A, int k, int ms, int offset)
 {
     arma::uvec selections(k, arma::fill::zeros);
 
@@ -150,7 +150,7 @@ arma::uvec selectByImportanceScore(arma::dmat *A, int k)
         arma::dvec singularValues;
         arma::dmat rightSingularVectors;
         arma::dmat product = (*A).t() * (*A);
-        f << "n = " << std::to_string(n) << " k(P) = " << std::to_string(arma::cond(product)) << std::endl;
+
         arma::eig_sym(singularValues, rightSingularVectors, product);
 
         // calcaulte importance scores of right singular vectors
@@ -158,9 +158,10 @@ arma::uvec selectByImportanceScore(arma::dmat *A, int k)
         for (int j = 0; j < A->n_cols; j++)
         {
             scores.at(j) = 0;
-            for (int i = 0; i < k - n; i++)
+            for (int i = 0; i < k-n; i++)
             {
-                scores.at(j) += rightSingularVectors.at(i, j) * rightSingularVectors.at(i, j);
+                if(j >= offset)  scores.at(j) += (rightSingularVectors.at(j,i) * rightSingularVectors.at(j,i))/ms;
+                else scores.at(j) += (rightSingularVectors.at(j,i) * rightSingularVectors.at(j,i));
             }
         }
 
