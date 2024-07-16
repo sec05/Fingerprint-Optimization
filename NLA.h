@@ -78,11 +78,12 @@ arma::uvec QDEIM(arma::dmat *A, int k, double tol)
     int kk = k;
     arma::dmat Q, R;
     R = R.t();
-    arma::qr(Q, R, A->head_cols(k));
-
+    arma::qr_econ(Q, R, A->head_cols(k));
     for (int j = k + 1; j < A->n_cols; j++)
     {
         arma::dvec rowNorms(R.n_rows + 1, arma::fill::zeros);
+        
+        #pragma omp parallel for
         for (int i = 0; i < R.n_rows; i++)
         {
             rowNorms(i) = arma::norm(R.row(i), 2);
@@ -105,7 +106,8 @@ arma::uvec QDEIM(arma::dmat *A, int k, double tol)
 
         row.at(R.n_cols - 1) = rho;
         R = arma::join_cols(R, row.t());
-
+        
+        #pragma omp parallel for
         for (int i = 0; i < k; i++)
         {
             rowNorms(i) += r(i) * r(i);
@@ -135,6 +137,7 @@ arma::uvec QDEIM(arma::dmat *A, int k, double tol)
             R = R.head_rows(k);
         }
     }
+
     return DEIM(&R, kk);
 }
 

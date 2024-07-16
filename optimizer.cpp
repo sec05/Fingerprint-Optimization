@@ -40,8 +40,10 @@ void Optimizer::getKBestColumns(int k)
             break;
         case 3:
             selections.push_back(farthestPointSampling(fingerprints.at(i),k));
+            break;
         case 4:
             selections.push_back(deterministicCUR(fingerprints.at(i),k));
+            break;
         default:
             break;
         }
