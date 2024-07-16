@@ -9,9 +9,10 @@
 
 using namespace OPT;
 
-Optimizer::Optimizer(char *f)
+Optimizer::Optimizer(char *f, int i)
 {
     inputFile = f;
+    mode = i;
     generator = new Generator(f);
     std::vector<arma::uvec> selections;
 }
@@ -26,7 +27,24 @@ void Optimizer::getKBestColumns(int k)
     printf("Getting %d best columns\n", k);
     for (int i = 0; i < fingerprints.size(); i++)
     {
-        selections.push_back(selectByImportanceScore(fingerprints.at(i),k,generator->ms.at(i),generator->totalRadial.at(i),2));
+        switch (mode)
+        {
+        case 0:
+            selections.push_back(DEIM(fingerprints.at(i),k));
+            break;
+        case 1:
+            selections.push_back(QDEIM(fingerprints.at(i),k,0.9));
+            break;
+        case 2:
+            selections.push_back(selectByImportanceScore(fingerprints.at(i),k,generator->ms.at(i),generator->totalRadial.at(i)));
+            break;
+        case 3:
+            selections.push_back(farthestPointSampling(fingerprints.at(i),k));
+        case 4:
+            selections.push_back(deterministicCUR(fingerprints.at(i),k));
+        default:
+            break;
+        }
     }
 }
 

@@ -13,10 +13,9 @@
 // read command line input.
 int main(int argc, char **argv)
 {
-
-	OPT::Optimizer *optimizer = new OPT::Optimizer("Bi.nn");
+	OPT::Optimizer *optimizer = new OPT::Optimizer("Bi.nn",atoi(argv[1]));
 	optimizer->fingerprints = optimizer->generator->generate_fingerprint_matrix(100, 0, 10, 125, 0, 10);
 	optimizer->getKBestColumns(50);
-	optimizer->outputVariables("out.txt");
+	optimizer->outputVariables(argv[2]);
 	return 0;
 }

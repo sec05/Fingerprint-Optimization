@@ -41,13 +41,13 @@ arma::uvec DEIM(arma::dmat *A, int k)
     arma::dmat V;
     arma::dmat p = (*A).t() * (*A);
     arma::eig_sym(s, V, p, "dc");
-    arma::uvec selections(k);
+    arma::uvec selections(k,arma::fill::value(-1));
 
     // v = V(:,1)
-    arma::dvec v = A->col(0);
+    arma::dvec v = V.col(0);
 
     // p_1 = argmax(|v|)
-    selections[0] = arma::abs(v).index_max();
+    selections(0) = arma::abs(v).index_max();
 
     for (int j = 1; j < k; j++)
     {
