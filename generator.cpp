@@ -20,7 +20,7 @@ Generator::~Generator()
     delete calibrator;
 }
 
-std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFingerprints, double radialFingerprintsLowerBound, double radialFingerprintsUpperBound, int numBondFingerprints, double bondFingerprintsLowerBound, double bondFingerprintsUpperBound)
+std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFingerprints, double radialFingerprintsLowerBound, double radialFingerprintsUpperBound, int numBondFingerprints, double bondFingerprintsLowerBound, double bondFingerprintsUpperBound, int mode)
 {
     // create input file
     this->numRadialFingerprints = numRadialFingerprints;
@@ -38,7 +38,7 @@ std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFi
     std::strcpy(f, temp.c_str());
     calibrator = new PairRANN(f);
     calibrator->setup();
-    calibrator->normalize_data();
+    if(mode > 1) calibrator->normalize_data();
     // need to find the matrix size to allocate **FIND BETTER METHOD**
     int networks = calibrator->nelements;
 
