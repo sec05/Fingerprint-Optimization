@@ -33,6 +33,7 @@ void Optimizer::getKBestColumns(int k)
             selections.push_back(DEIM(fingerprints.at(i),k));
             break;
         case 1:
+
             selections.push_back(QDEIM(fingerprints.at(i),k,0.9));
             break;
         case 2:
@@ -43,6 +44,9 @@ void Optimizer::getKBestColumns(int k)
             break;
         case 4:
             selections.push_back(deterministicCUR(fingerprints.at(i),k));
+            break;
+        case 5:
+            selections.push_back(DAPDCX(fingerprints.at(i),k,0.5,5));
             break;
         default:
             break;

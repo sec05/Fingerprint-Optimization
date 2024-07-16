@@ -1,6 +1,6 @@
 #include <armadillo>
 #include <random>
-#include "omp.h"
+//#include "omp.h"
 
 arma::dvec GMRES(arma::dmat *A, arma::dvec *b, int k, double tol)
 {
@@ -414,5 +414,32 @@ arma::uvec deterministicCUR(arma::dmat *A, int k)
     arma::dmat C1 = (*A) * S;
     arma::dmat C2 = adaptiveCols(*A, C1, 1, k / 2, selections, k / 2);
     selections.save("selections.txt", arma::raw_ascii);
+    return selections;
+}
+
+arma::uvec DAPDCX(arma::dmat *A, int k, double delta, int l){
+    arma::dmat E = *A;
+    arma::uvec selections;
+    selections.resize(0);
+    while(selections.n_elem < k){
+        arma::dmat U, V;
+        arma::dvec S;
+        arma::svd_econ(U,S,V,E);
+
+        int b = INT64_MAX;
+        for(int i = 1; i <= k - selections.n_elem; i++){
+            if(S.at(i) >= delta*S.at(0)) b =i;
+        }
+        int c = b;
+        if(l < c) c = l;
+        printf("C = %d\n",c);
+        arma::uvec p = DEIM(&V,c);
+        
+        selections = arma::join_cols(selections,p);
+
+        arma::dmat C = A->cols(p);
+        E = *A - C * arma::pinv(C) * *A;
+    }
+
     return selections;
 }
