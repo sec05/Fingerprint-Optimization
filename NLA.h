@@ -331,13 +331,20 @@ arma::dmat BSSSampling(arma::dmat &V, arma::dmat &R, int r, arma::uvec &selectio
     }
 
     std::sort(scoreIndices.begin(), scoreIndices.end(), std::greater<std::pair<double, int>>());
-
+    std::ofstream f;
+    f.open("scores.txt");
+    for(int i = 0; i < n; i++) f << std::to_string(scoreIndices[i].first) << "," << std::to_string(scoreIndices[i].second) << std::endl;
     for (int i = 0; i < r; i++)
     {
         int index = scoreIndices[i].second;
         s(index) = 1.0 / (double)r;
         S(index, i) = std::sqrt(s(index));
         selections(i) = index;
+        
+        for(int j = i+1; j < n-offset; j++){
+            scoreIndices[j].first = scoreIndices[i].first - scoreIndices[j].first;
+        }
+        std::sort(scoreIndices.begin()+i+1, scoreIndices.end()-offset, std::greater<std::pair<double, int>>());
     }
 
     arma::dmat VTS = V.t() * S;
