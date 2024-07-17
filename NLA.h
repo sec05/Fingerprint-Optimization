@@ -1,6 +1,6 @@
 #include <armadillo>
 #include <random>
-//#include "omp.h"
+// #include "omp.h"
 
 arma::dvec GMRES(arma::dmat *A, arma::dvec *b, int k, double tol)
 {
@@ -41,7 +41,7 @@ arma::uvec DEIM(arma::dmat *A, int k)
     arma::dmat V;
     arma::dmat p = (*A).t() * (*A);
     arma::eig_sym(s, V, p, "dc");
-    arma::uvec selections(k,arma::fill::value(-1));
+    arma::uvec selections(k, arma::fill::value(-1));
 
     // v = V(:,1)
     arma::dvec v = V.col(0);
@@ -82,8 +82,8 @@ arma::uvec QDEIM(arma::dmat *A, int k, double tol)
     for (int j = k + 1; j < A->n_cols; j++)
     {
         arma::dvec rowNorms(R.n_rows + 1, arma::fill::zeros);
-        
-        #pragma omp parallel for
+
+#pragma omp parallel for
         for (int i = 0; i < R.n_rows; i++)
         {
             rowNorms(i) = arma::norm(R.row(i), 2);
@@ -106,8 +106,8 @@ arma::uvec QDEIM(arma::dmat *A, int k, double tol)
 
         row.at(R.n_cols - 1) = rho;
         R = arma::join_cols(R, row.t());
-        
-        #pragma omp parallel for
+
+#pragma omp parallel for
         for (int i = 0; i < k; i++)
         {
             rowNorms(i) += r(i) * r(i);
@@ -156,14 +156,14 @@ arma::uvec selectByImportanceScore(arma::dmat *A, int k, int ms, int offset, int
 
         arma::eig_sym(singularValues, rightSingularVectors, product);
 
-// calcaulte importance scores of right singular vectors
+        // calcaulte importance scores of right singular vectors
         for (int j = 0; j < A->n_cols; j++)
         {
             scores.at(j) = 0;
             for (int i = 0; i < k - n; i++)
             {
                 if (j >= offset)
-                    scores.at(j) += (rightSingularVectors.at(j, i) * rightSingularVectors.at(j, i)) / ((ms-((j-offset)%ms))*(ms-((j-offset)%ms)));
+                    scores.at(j) += (rightSingularVectors.at(j, i) * rightSingularVectors.at(j, i)) / ((ms - ((j - offset) % ms)) * (ms - ((j - offset) % ms)));
                 else
                     scores.at(j) += (rightSingularVectors.at(j, i) * rightSingularVectors.at(j, i));
             }
@@ -171,7 +171,7 @@ arma::uvec selectByImportanceScore(arma::dmat *A, int k, int ms, int offset, int
 
         for (int i = 0; i <= n; i++)
             scores.at(selections.at(i)) = INT64_MIN;
-        scores.save("scores"+std::to_string(n)+".txt",arma::raw_ascii);
+        scores.save("scores" + std::to_string(n) + ".txt", arma::raw_ascii);
         //  Get best column
         int l = scores.index_max();
         selections.at(n) = l;
@@ -307,7 +307,7 @@ arma::dmat **randomizedSVD(arma::dmat *A, int k, int q)
     return r;
 }
 
-arma::dmat BSSSampling(arma::dmat &V, arma::dmat &R, int r, arma::uvec &selections)
+arma::dmat BSSSampling(arma::dmat &V, arma::dmat &R, int r, arma::uvec &selections, double ms, int offset)
 {
     // setup for algorithm
     int n = V.n_rows;
@@ -315,6 +315,10 @@ arma::dmat BSSSampling(arma::dmat &V, arma::dmat &R, int r, arma::uvec &selectio
     arma::dvec s(n, arma::fill::zeros);
     arma::dmat S(n, r, arma::fill::zeros);
 
+    for (int i = offset; i < n; i++)
+    {
+        V.row(i) /= ms;
+    }
     arma::dvec scores = arma::sum(arma::square(V), 1);
 
     double threshold = std::sqrt(static_cast<double>(k) / r);
@@ -349,11 +353,14 @@ arma::dmat BSSSampling(arma::dmat &V, arma::dmat &R, int r, arma::uvec &selectio
     return S;
 }
 
-arma::dmat adaptiveCols(arma::dmat &A, arma::dmat &V, double alpha, int c, arma::uvec &selections, int offset)
+arma::dmat adaptiveCols(arma::dmat &A, arma::dmat &V, double alpha, int c, arma::uvec &selections, int offset, double ms, int o)
 {
     // compute residual
     arma::dmat B = A - V * arma::pinv(V) * A;
-
+    for (int i = o; i < B.n_cols; i++)
+    {
+        B.col(i) /= (ms * ms);
+    }
     // calculate leverage scores for each row
     std::vector<double> ps;
 
@@ -397,8 +404,9 @@ arma::dmat adaptiveCols(arma::dmat &A, arma::dmat &V, double alpha, int c, arma:
     return C;
 }
 
-arma::uvec deterministicCUR(arma::dmat *A, int k)
+arma::uvec deterministicCUR(arma::dmat *A, int k, int ms, int offset)
 {
+    printf("Running DCUR!\n");
     if (k > arma::rank(*A))
         printf("k given is greater than rank(A)! rank(A) = %d \n", arma::rank(*A));
     arma::uvec selections(k, arma::fill::value(-1));
@@ -410,32 +418,37 @@ arma::uvec deterministicCUR(arma::dmat *A, int k)
     E = (*A) - (*A) * V * V.t();
     E = E.t();
 
-    arma::dmat S = BSSSampling(V, E, k / 2, selections);
+    arma::dmat S = BSSSampling(V, E, k / 2, selections, ms, offset);
     arma::dmat C1 = (*A) * S;
-    arma::dmat C2 = adaptiveCols(*A, C1, 1, k / 2, selections, k / 2);
+    arma::dmat C2 = adaptiveCols(*A, C1, 1, k / 2, selections, k / 2, ms, offset);
     selections.save("selections.txt", arma::raw_ascii);
     return selections;
 }
 
-arma::uvec DAPDCX(arma::dmat *A, int k, double delta, int l){
+arma::uvec DAPDCX(arma::dmat *A, int k, double delta, int l)
+{
     arma::dmat E = *A;
     arma::uvec selections;
     selections.resize(0);
-    while(selections.n_elem < k){
+    while (selections.n_elem < k)
+    {
         arma::dmat U, V;
         arma::dvec S;
-        arma::svd_econ(U,S,V,E);
+        arma::svd_econ(U, S, V, E);
 
-        int b = INT64_MAX;
-        for(int i = 1; i <= k - selections.n_elem; i++){
-            if(S.at(i) >= delta*S.at(0)) b =i;
+        int b = INT16_MAX;
+        for (int i = 1; i <= k - selections.n_elem; i++)
+        {
+            if (S.at(i) >= delta * S.at(0))
+                b = i;
         }
         int c = b;
-        if(l < c) c = l;
-        printf("C = %d\n",c);
-        arma::uvec p = DEIM(&V,c);
-        
-        selections = arma::join_cols(selections,p);
+        if (l < c)
+            c = l;
+
+        arma::uvec p = DEIM(&V, c);
+
+        selections = arma::join_cols(selections, p);
 
         arma::dmat C = A->cols(p);
         E = *A - C * arma::pinv(C) * *A;

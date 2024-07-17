@@ -43,7 +43,7 @@ void Optimizer::getKBestColumns(int k)
             selections.push_back(farthestPointSampling(fingerprints.at(i),k));
             break;
         case 4:
-            selections.push_back(deterministicCUR(fingerprints.at(i),k));
+            selections.push_back(deterministicCUR(fingerprints.at(i),k,generator->ms.at(i),generator->totalRadial.at(i)));
             break;
         case 5:
             selections.push_back(DAPDCX(fingerprints.at(i),k,0.5,5));
