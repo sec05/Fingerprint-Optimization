@@ -19,7 +19,7 @@ int main(int argc, char **argv)
 	}
 	OPT::Optimizer *optimizer = new OPT::Optimizer();
 	optimizer->handleInput(argv[2]);
-	optimizer->getKBestColumns(5);
+	optimizer->getKBestColumns();
 	optimizer->outputVariables();
 	return 0;
 }

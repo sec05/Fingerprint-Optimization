@@ -14,7 +14,7 @@ namespace OPT
         std::vector<arma::dmat *> fingerprints;
         Generator *generator;
         std::vector<arma::uvec> selections;
-        void getKBestColumns(int);
+        void getKBestColumns();
         void outputVariables();
         void handleInput(char*);
     };

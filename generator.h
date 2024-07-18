@@ -26,6 +26,7 @@ namespace OPT
         double bondFingerprintsLowerBound;
         double bondFingerprintsUpperBound;
         bool verbose;
+        int selections;
 
         std::vector<int> ms, totalRadial, totalBond;
     private:

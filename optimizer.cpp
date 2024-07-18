@@ -20,8 +20,9 @@ Optimizer::~Optimizer()
     delete generator;
 }
 
-void Optimizer::getKBestColumns(int k)
-{
+void Optimizer::getKBestColumns()
+{   
+    int k = generator->selections;
     int mode = 4;
     printf("Getting %d best columns\n", k);
     for (int i = 0; i < fingerprints.size(); i++)

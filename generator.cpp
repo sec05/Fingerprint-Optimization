@@ -530,7 +530,7 @@ std::map<int, std::pair<std::string, std::string>> *Generator::readFile()
 
 void Generator::outputVariables(std::vector<arma::uvec>& selections)
 {
-    printf("Outputting variables\n");
+    printf("Outputing variables\n");
     // generate a list of atoms so we know what .optv file to open
     std::fstream reader;
     std::string file = inputFile + ".opt";
@@ -625,5 +625,6 @@ void Generator::parseParameters(char* path){
         else if(key=="ks:") numBondFingerprints = std::stoi(value);
         else if(key=="Alpha_k Upper Bound:") bondFingerprintsUpperBound = std::stod(value);
         else if(key=="Alpha_k Lower Bound:") bondFingerprintsLowerBound = std::stod(value);
+        else if(key=="Selections:") selections = std::stoi(value);
     }
 }
