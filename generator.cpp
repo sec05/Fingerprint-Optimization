@@ -615,7 +615,7 @@ void Generator::parseParameters(char* path){
     for(std::map<std::string,std::string>::iterator iter = inputMap.begin(); iter != inputMap.end(); ++iter){
         std::string key = iter->first;
         std::string value = iter->second;
-        std::cout << key << "," << value << std::endl;
+
         if(key=="Input File:") inputFile = value;
         else if(key=="Output File:") outputFile = value;
         else if(key=="Verbose:") verbose = (std::stoi(value) == 1);

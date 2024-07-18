@@ -3,7 +3,7 @@ Input File:
 Bi.nn
 Output File:
 # comment here
-output.txt
+Bi.DCUR.out
 Verbose:
 1
 Output Selections:
@@ -20,3 +20,5 @@ Alpha_k Upper Bound:
 10
 Alpha_k Lower Bound:
 0
+Selections:
+50
