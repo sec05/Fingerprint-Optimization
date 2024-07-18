@@ -556,7 +556,6 @@ void Generator::outputVariables(std::vector<arma::uvec>& selections)
         vector = "Optimizer Output/" + vector;
         std::ifstream f;
         f.open(vector);
-        printf("Error: could not open: %s\n",vector.c_str());
         std::vector<std::string> variables;
         for (int i = 0; i < cols.n_elem; i++)
         {

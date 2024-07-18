@@ -1,5 +1,6 @@
 #include <armadillo>
 #include <random>
+#include <math.h>
 // #include "omp.h"
 
 arma::dvec GMRES(arma::dmat *A, arma::dvec *b, int k, double tol)
@@ -412,20 +413,23 @@ arma::dmat adaptiveCols(arma::dmat &A, arma::dmat &V, double alpha, int c, arma:
 arma::uvec deterministicCUR(arma::dmat *A, int k, int ms, int offset)
 {
     printf("Running DCUR!\n");
-    if (k > arma::rank(*A))
-        printf("k given is greater than rank(A)! rank(A) = %d \n", arma::rank(*A));
+    int n = arma::rank(*A);
+    if (k > n)
+        printf("k given is greater than rank(A)! rank(A) = %d \n", n);
+    
     arma::uvec selections(k, arma::fill::value(-1));
     // deterministic SVD
     arma::dmat U, V, E;
     arma::dvec s;
-    arma::svd(U, s, V, *A);
+    arma::svd_econ(U, s, V, *A);
     V = V.cols(0, k - 1);
     E = (*A) - (*A) * V * V.t();
     E = E.t();
-
-    arma::dmat S = BSSSampling(V, E, k / 2, selections, ms, offset);
+    int a = k/2,b = k/2;
+    if(k % 2 != 0) a++;
+    arma::dmat S = BSSSampling(V, E, a, selections, ms, offset);
     arma::dmat C1 = (*A) * S;
-    arma::dmat C2 = adaptiveCols(*A, C1, 1, k / 2, selections, k / 2, ms, offset);
+    arma::dmat C2 = adaptiveCols(*A, C1, 1,b, selections, a, ms, offset);
     selections.save("selections.txt", arma::raw_ascii);
     return selections;
 }
