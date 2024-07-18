@@ -9,31 +9,21 @@
 //bug where if theres nit a comment at the top it wont read the file
 using namespace OPT;
 using namespace LAMMPS_NS;
+Generator::Generator(){
 
-Generator::Generator(char *f)
-{
-    inputFile = f;
 }
-
 Generator::~Generator()
 {
     delete calibrator;
 }
 
-std::vector<arma::dmat *> Generator::generate_fingerprint_matrix(int numRadialFingerprints, double radialFingerprintsLowerBound, double radialFingerprintsUpperBound, int numBondFingerprints, double bondFingerprintsLowerBound, double bondFingerprintsUpperBound, int mode)
+std::vector<arma::dmat *> Generator::generate_fingerprint_matrix()
 {
     // create input file
-    this->numRadialFingerprints = numRadialFingerprints;
-    this->numBondFingerprints = numBondFingerprints;
-    this->radialFingerprintsLowerBound = radialFingerprintsLowerBound;
-    this->radialFingerprintsUpperBound = radialFingerprintsUpperBound;
-    this->bondFingerprintsLowerBound = bondFingerprintsLowerBound;
-    this->bondFingerprintsUpperBound = bondFingerprintsUpperBound;
     generate_opt_inputs();
     std::cout << "generated input!" << std::endl;
     // then pass it through set FOR NOW
-    inputFile += ".opt";
-    std::string temp = "./Optimizer Output/" + inputFile;
+    std::string temp = "./Optimizer Output/" + inputFile + ".opt";
     char *f = new char[temp.size() + 1];
     std::strcpy(f, temp.c_str());
     calibrator = new PairRANN(f);
@@ -481,34 +471,6 @@ void Generator::generate_opt_inputs()
     }
 }
 
-// function for parsing top comment line with generation requirements
-void Generator::parse_parameters()
-{
-    /*std::ifstream f(inputFile);
-    if (!f)
-    {
-        printf("Generator error: cannot  access %s", inputFile.c_str());
-        return;
-    }
-    char c;
-    f.get(c);
-    if(c != '#'){
-        printf("Generator error: cannot find optimization parameters in %s",inputFile.c_str());
-    }
-    // grab first line
-    std::string line;
-    std::getline(f, line);
-    // loop over an assign values
-    std::string token;
-
-    size_t pos = 0;
-    while(pos < line.size()){
-        token = line.substr(pos,line.find('='));
-
-        if(token == "rf")
-    }*/
-}
-
 // function for parsing out fingerprint sections from
 std::map<int, std::pair<std::string, std::string>> *Generator::readFile()
 {
@@ -564,4 +526,105 @@ std::map<int, std::pair<std::string, std::string>> *Generator::readFile()
      */
     f.close();
     return pairs;
+}
+
+void Generator::outputVariables(std::vector<arma::uvec>& selections)
+{
+    printf("Outputting variables\n");
+    // generate a list of atoms so we know what .optv file to open
+    std::fstream reader;
+    std::string file = inputFile + ".opt";
+    file = "./Optimizer Output/"+file;
+    reader.open(file, std::fstream::in);
+    if(!reader) printf("Error could not open %s\n",file.c_str());
+    std::string atoms;
+    std::getline(reader, atoms);
+    if(atoms[0]=='#') std::getline(reader,atoms);
+    std::getline(reader,atoms);
+    reader.close();
+    std::ofstream out;
+    out.open(outputFile);
+    if(!out) printf("Error: could not open output file: %s\n",outputFile.c_str());
+    std::vector<std::string> atomTypes = LAMMPS_NS::utils::splitString(atoms);
+    for (int i = 0; i < atomTypes.size(); i++)
+    {
+        std::string atom = atomTypes.at(i);
+        arma::uvec cols = selections.at(i);
+        // open variable vector file
+        std::string vector = inputFile;
+        vector += "."+atom+".optv";
+        vector = "Optimizer Output/" + vector;
+        std::ifstream f;
+        f.open(vector);
+        printf("Error: could not open: %s\n",vector.c_str());
+        std::vector<std::string> variables;
+        for (int i = 0; i < cols.n_elem; i++)
+        {
+            std::string line;
+            int entry = 0;
+            while(std::getline(f, line)){
+                if(cols.at(i) == entry) 
+                {
+                    variables.push_back(line);
+                    break;
+                }
+                else{
+                    entry++;
+                }
+            }
+            f.seekg(0);
+        }
+        out << atom << std::endl;
+        for(std::string variable : variables){
+            out << variable << std::endl;
+        }
+    }
+    out.close();
+}
+
+void Generator::parseParameters(char* path){
+    // open input file
+    std::ifstream input;
+    input.open(path);
+    if(!input){
+         printf("Error could not open: %s\n",path); 
+         exit(0);
+    }
+    // want to put it into a map of property and value for easy assigning
+    std::map<std::string, std::string> inputMap;
+
+    // now we iterate down file and add to map
+    std::string line;
+    bool key = true;
+    int index = 0;
+    std::string temp;
+    while(std::getline(input,line)){
+        line = utils::trim(line," ");
+        if(line[0] == '#') continue;
+        if(key){
+            temp = line;
+            key = false;
+            continue;
+        }
+        if(!key){
+            inputMap[temp] = line;
+            key = true;
+        }
+    }
+
+    // we now iterate down map and set up paramaeters
+    for(std::map<std::string,std::string>::iterator iter = inputMap.begin(); iter != inputMap.end(); ++iter){
+        std::string key = iter->first;
+        std::string value = iter->second;
+        std::cout << key << "," << value << std::endl;
+        if(key=="Input File:") inputFile = value;
+        else if(key=="Output File:") outputFile = value;
+        else if(key=="Verbose:") verbose = (std::stoi(value) == 1);
+        else if(key=="Radial Blocks:") numRadialFingerprints = std::stoi(value);
+        else if(key=="Alpha Upper Bound:") radialFingerprintsUpperBound = std::stod(value);
+        else if(key=="Alpha Lower Bound:") radialFingerprintsLowerBound = std::stod(value);
+        else if(key=="ks:") numBondFingerprints = std::stoi(value);
+        else if(key=="Alpha_k Upper Bound:") bondFingerprintsUpperBound = std::stod(value);
+        else if(key=="Alpha_k Lower Bound:") bondFingerprintsLowerBound = std::stod(value);
+    }
 }

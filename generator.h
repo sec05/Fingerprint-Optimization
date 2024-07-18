@@ -13,23 +13,26 @@ namespace OPT
     class Generator
     {
     public:
-        Generator(char *);
+        Generator();
         ~Generator();
 
-        std::vector<arma::dmat *> generate_fingerprint_matrix(int, double, double, int, double, double, int);
+        std::vector<arma::dmat *> generate_fingerprint_matrix();
+        void parseParameters(char*);
+        void outputVariables(std::vector<arma::uvec>&);
         int numRadialFingerprints;
         double radialFingerprintsLowerBound;
         double radialFingerprintsUpperBound;
         int numBondFingerprints;
         double bondFingerprintsLowerBound;
         double bondFingerprintsUpperBound;
+        bool verbose;
+
         std::vector<int> ms, totalRadial, totalBond;
     private:
         LAMMPS_NS::PairRANN *calibrator;
         std::string inputFile;
-
+        std::string outputFile;
         void generate_opt_inputs();
-        void parse_parameters();
         std::map<int, std::pair<std::string, std::string>> *readFile();
     };
 }

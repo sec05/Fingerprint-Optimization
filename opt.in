@@ -1,0 +1,22 @@
+# Any lines with "#" will be ignored!
+Input File:
+Bi.nn
+Output File:
+# comment here
+output.txt
+Verbose:
+1
+Output Selections:
+1
+Radial Blocks:
+100
+Alpha Upper Bound:
+10
+Alpha Lower Bound:
+0
+ks:
+125
+Alpha_k Upper Bound:
+10
+Alpha_k Lower Bound:
+0

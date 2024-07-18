@@ -9,11 +9,9 @@
 
 using namespace OPT;
 
-Optimizer::Optimizer(char *f, int i)
+Optimizer::Optimizer()
 {
-    inputFile = f;
-    mode = i;
-    generator = new Generator(f);
+    generator = new Generator();
     std::vector<arma::uvec> selections;
 }
 
@@ -24,6 +22,7 @@ Optimizer::~Optimizer()
 
 void Optimizer::getKBestColumns(int k)
 {
+    int mode = 4;
     printf("Getting %d best columns\n", k);
     for (int i = 0; i < fingerprints.size(); i++)
     {
@@ -54,52 +53,12 @@ void Optimizer::getKBestColumns(int k)
     }
 }
 
-void Optimizer::outputVariables(std::string path)
+void Optimizer::outputVariables()
 {
-    // generate a list of atoms so we know what .optv file to open
-    std::fstream reader;
-    std::string file = inputFile;
-    file+=".opt";
-    file = "./Optimizer Output/"+file;
-    reader.open(file, std::fstream::in);
-    std::string atoms;
-    std::getline(reader, atoms);
-    std::getline(reader, atoms);
-    reader.close();
-    std::ofstream out;
-    out.open(path);
-    std::vector<std::string> atomTypes = LAMMPS_NS::utils::splitString(atoms);
-    for (int i = 0; i < atomTypes.size(); i++)
-    {
-        std::string atom = atomTypes.at(i);
-        arma::uvec cols = selections.at(i);
-        // open variable vector file
-        std::string vector = inputFile;
-        vector += "."+atom+".optv";
-        vector = "Optimizer Output/" + vector;
-        std::ifstream f;
-        f.open(vector);
-        std::vector<std::string> variables;
-        for (int i = 0; i < cols.n_elem; i++)
-        {
-            std::string line;
-            int entry = 0;
-            while(std::getline(f, line)){
-                if(cols.at(i) == entry) 
-                {
-                    variables.push_back(line);
-                    break;
-                }
-                else{
-                    entry++;
-                }
-            }
-            f.seekg(0);
-        }
-        out << atom << std::endl;
-        for(std::string variable : variables){
-            out << variable << std::endl;
-        }
-    }
-    out.close();
+    generator->outputVariables(selections);
+}
+
+void Optimizer::handleInput(char* path){
+    generator->parseParameters(path);
+    fingerprints = generator->generate_fingerprint_matrix();
 }

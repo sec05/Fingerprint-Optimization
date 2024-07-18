@@ -19,6 +19,8 @@ namespace utils {
   char *strdup(const std::string &text);
   std::vector<std::string> splitString(const std::string&);
   int searchTable(std::string key, std::map<int, std::pair<std::string, std::string> >*);
+  std::string trim(const std::string&,const std::string&);
+  std::string reduce(const std::string&,const std::string&,const std::string&);
 };
 
 

@@ -12,10 +12,14 @@
 #include <math.h>
 // read command line input.
 int main(int argc, char **argv)
-{
-	OPT::Optimizer *optimizer = new OPT::Optimizer(argv[3],atoi(argv[1]));
-	optimizer->fingerprints = optimizer->generator->generate_fingerprint_matrix(100, 0, 10, 125, 0, 10, atoi(argv[1]));
-	optimizer->getKBestColumns(50);
-	optimizer->outputVariables(argv[2]);
+{	
+	if(strcmp(argv[1],"-in") != 0){
+		printf("Error: input format it \"-in path/to/file\"\n");
+		return 0;
+	}
+	OPT::Optimizer *optimizer = new OPT::Optimizer();
+	optimizer->handleInput(argv[2]);
+	optimizer->getKBestColumns(5);
+	optimizer->outputVariables();
 	return 0;
 }
