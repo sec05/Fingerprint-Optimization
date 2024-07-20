@@ -68,6 +68,7 @@ void PairRANN::read_file(char *filename)
     else if (linev[0]=="calibrationparameters") {
         if (~is_lammps)read_parameters(linev,line1v,fp,filename,&linenum,linetemp);
     }
+    else printf("Could not match %s\n",linev[0].c_str());
    // else errorf(filename,linenum-1,"Could not understand file syntax: unknown keyword");
     ptr=fgets(linetemp,longline,fp);
     linenum++;

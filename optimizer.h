@@ -17,5 +17,6 @@ namespace OPT
         void getKBestColumns();
         void outputVariables();
         void handleInput(char*);
+        
     };
 }

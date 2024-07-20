@@ -56,7 +56,9 @@ void Optimizer::getKBestColumns()
 
 void Optimizer::outputVariables()
 {
-    generator->outputVariables(selections);
+    generator->readSelectedVariables(selections);
+    generator->generateBestSelections();
+    generator->generateOptimizedInputFile();
 }
 
 void Optimizer::handleInput(char* path){
