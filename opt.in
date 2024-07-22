@@ -1,9 +1,9 @@
 # Any lines with "#" will be ignored!
 Input File:
-NiTi.nn
+Bi.nn
 Output File:
 # comment here
-NiTi.DCUR.out
+Bi.DCUR.out
 Verbose:
 1
 Output Selections:
@@ -30,3 +30,5 @@ Output Radial Blocks:
 1
 Output Alphaks:
 10
+Debug:
+1

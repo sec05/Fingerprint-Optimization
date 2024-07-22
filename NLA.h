@@ -3,37 +3,6 @@
 #include <math.h>
 // #include "omp.h"
 
-arma::dvec GMRES(arma::dmat *A, arma::dvec *b, int k, double tol)
-{
-    arma::dmat Q = arma::dmat(b->n_rows, k + 1);
-    arma::dmat H = arma::dmat(k + 1, k);
-    arma::dvec be1 = arma::dvec(b->n_rows);
-    be1.zeros();
-    be1.at(0) = arma::norm(*b, 2);
-    H.zeros();
-    for (int n = 0; n < k; n++)
-    {
-        // arnoldi
-        arma::dvec v = (*A) * Q.col(n);
-        for (int j = 0; j <= n; j++)
-        {
-            H.at(j, n) = arma::as_scalar(Q.col(j) * v);
-            v -= H.at(j, n) * Q.col(j);
-        }
-        H.at(n + 1, n) = arma::norm(v, 2);
-        if (H.at(n + 1, n) < tol)
-            break;
-        Q.col(n + 1) = v / H.at(n + 1, n);
-    }
-    // solve least squares via QR
-    arma::dmat G, R;
-    arma::qr(G, R, H);
-    arma::dvec y;
-    if (b->n_rows == 1)
-        y = arma::solve(R, G.t() * be1.at(0));
-    return Q * y;
-}
-
 arma::uvec DEIM(arma::dmat *A, int k)
 {
 
@@ -318,7 +287,7 @@ arma::dmat BSSSampling(arma::dmat &V, arma::dmat &R, int r, arma::uvec &selectio
 
     for (int i = offset; i < n; i++)
     {
-        V.row(i) /= ms;
+        V.col(i) /= ms;
     }
     arma::dvec scores = arma::sum(arma::square(V), 1);
 
@@ -413,7 +382,18 @@ arma::dmat adaptiveCols(arma::dmat &A, arma::dmat &V, double alpha, int c, arma:
 arma::uvec deterministicCUR(arma::dmat *A, int k, int ms, int offset)
 {
     printf("Running DCUR!\n");
-    int n = arma::rank(*A);
+    int n = 0;
+    try
+    {
+     n = arma::rank(*A);
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        printf("A is %d x %d\n", A->n_rows,A->n_cols);
+    }
+    
+    
     if (k > n)
         printf("k given is greater than rank(A)! rank(A) = %d \n", n);
     
@@ -431,37 +411,5 @@ arma::uvec deterministicCUR(arma::dmat *A, int k, int ms, int offset)
     arma::dmat C1 = (*A) * S;
     arma::dmat C2 = adaptiveCols(*A, C1, 1,b, selections, a, ms, offset);
     selections.save("selections.txt", arma::raw_ascii);
-    return selections;
-}
-
-arma::uvec DAPDCX(arma::dmat *A, int k, double delta, int l)
-{
-    arma::dmat E = *A;
-    arma::uvec selections;
-    selections.resize(0);
-    while (selections.n_elem < k)
-    {
-        arma::dmat U, V;
-        arma::dvec S;
-        arma::svd_econ(U, S, V, E);
-
-        int b = INT16_MAX;
-        for (int i = 1; i <= k - selections.n_elem; i++)
-        {
-            if (S.at(i) >= delta * S.at(0))
-                b = i;
-        }
-        int c = b;
-        if (l < c)
-            c = l;
-
-        arma::uvec p = DEIM(&V, c);
-
-        selections = arma::join_cols(selections, p);
-
-        arma::dmat C = A->cols(p);
-        E = *A - C * arma::pinv(C) * *A;
-    }
-
     return selections;
 }
