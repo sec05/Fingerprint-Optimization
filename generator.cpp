@@ -552,7 +552,7 @@ void Generator::parseParameters(char *path)
             selections = std::stoi(value);
         else if (key == "Output Selections:")
             outputSelections = (std::stoi(value) == 1);
-        else if (key == "Selection Method")
+        else if (key == "Selection Method:")
             selectionMethod = std::stoi(value);
         else if (key == "Output Radial Blocks:")
             outputRadialBlocks = std::stoi(value);
@@ -812,7 +812,7 @@ void Generator::largestSpanningSelection()
         int bestMLen = 0;
         for (std::map<int, std::vector<double>>::iterator it = atomMap.begin(); it != atomMap.end(); ++it)
         {
-            if ((int)it->second.size() > bestMLen)
+            if ((int)it->second.size() > bestMLen || (int)it->second.size() >= (int)ceil(outputAlphaks/bestM))
             {
                 bestM = (int)it->first;
                 bestMLen = it->second.size();
