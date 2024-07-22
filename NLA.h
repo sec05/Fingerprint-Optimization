@@ -287,7 +287,7 @@ arma::dmat BSSSampling(arma::dmat &V, arma::dmat &R, int r, arma::uvec &selectio
 
     for (int i = offset; i < n; i++)
     {
-        V.col(i) /= ms;
+        V.row(i) /= ms;
     }
     arma::dvec scores = arma::sum(arma::square(V), 1);
 

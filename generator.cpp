@@ -590,7 +590,8 @@ std::map<int, std::pair<std::string, std::string>> *Generator::readFile()
                 break;
         }
     }
-    else {
+    else
+    {
         f.seekg(0);
     }
     // iterate down the file and add pairs to the map
@@ -640,7 +641,7 @@ void Generator::readSelectedVariables(std::vector<arma::uvec> &selections)
     {
         std::string atom = atomTypes.at(i);
         arma::uvec cols = selections.at(i);
-        
+
         // open variable vector file
         std::string vector = inputFile;
         vector += "." + atom + ".optv";
@@ -675,7 +676,7 @@ void Generator::readSelectedVariables(std::vector<arma::uvec> &selections)
         // if requesting selections then we output
         if (outputSelections)
             out << atom << std::endl;
-        
+
         // add to the maps and split values from the selected variables
         for (std::string variable : variables)
         {
@@ -763,8 +764,9 @@ void Generator::greedySelection()
 
         ms.at(i) = bestM;
 
-        for (int j = 0; j < bestMLen; j++)
+        for (int j = 0; j < outputAlphaks; j++)
         {
+            if(j >= bestMLen) break;
             finalAlphaKs.at(i).push_back(selectedBond.at(i).at(bestM).at(j));
         }
 
@@ -779,6 +781,75 @@ void Generator::greedySelection()
 
 void Generator::largestSpanningSelection()
 {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(radialFingerprintsLowerBound, radialFingerprintsUpperBound);
+
+    // select globally best values
+    for (int i = 0; i < atomTypes.size(); i++)
+    {
+        std::map<int, std::vector<double>> atomMap = selectedRadial.at(i);
+        std::pair<int, int> range = osAndns.at(i);
+        finalAlphas.push_back(std::vector<double>());
+        finalAlphaKs.push_back(std::vector<double>());
+        for (int k = 0; k < outputRadialBlocks; k++)
+        {
+            for (int j = range.first; j <= range.second; j++)
+            {
+                // check if current n had nothing selected
+                if (atomMap.find(j) == atomMap.end())
+                    continue;
+                if (atomMap.at(j).size() == 0)
+                    finalAlphas.at(i).push_back(dis(gen));
+                finalAlphas.at(i).push_back(atomMap.at(j).at(k));
+            }
+        }
+
+        atomMap = selectedBond.at(i);
+
+        // select best m by the one with most selections
+        int bestM = 1;
+        int bestMLen = 0;
+        for (std::map<int, std::vector<double>>::iterator it = atomMap.begin(); it != atomMap.end(); ++it)
+        {
+            if ((int)it->second.size() > bestMLen)
+            {
+                bestM = (int)it->first;
+                bestMLen = it->second.size();
+            }
+        }
+
+        ms.at(i) = bestM;
+        std::sort(selectedBond.at(i).at(bestM).begin(), selectedBond.at(i).at(bestM).end());
+        finalAlphaKs.at(i).push_back(selectedBond.at(i).at(bestM).front());
+        finalAlphaKs.at(i).push_back(selectedBond.at(i).at(bestM).back());
+        for (int j = 0; j < outputAlphaks - 2; j++)
+        {
+            if(j >= bestMLen) break;
+            double maxGap = 0;
+            int maxGapIndex = -1;
+            for (int k = 0; k < selectedBond.at(i).at(bestM).size() - 1; ++k)
+            {
+                double gap = selectedBond.at(i).at(bestM).at(k + 1) - selectedBond.at(i).at(bestM).at(k);
+                if (gap > maxGap)
+                {
+                    maxGap = gap;
+                    maxGapIndex = i;
+                }
+            }
+                // Pick the middle element of the largest gap
+                double middleElement = (selectedBond.at(i).at(bestM)[maxGapIndex] + selectedBond.at(i).at(bestM)[maxGapIndex + 1]) / 2.0;
+                finalAlphaKs.at(i).push_back(middleElement);
+                selectedBond.at(i).at(bestM).erase(selectedBond.at(i).at(bestM).begin() + maxGapIndex + 1);
+        }
+
+        // add the difference if we couldnt fill
+        dis = std::uniform_real_distribution<>(bondFingerprintsLowerBound, bondFingerprintsUpperBound);
+        for (int j = bestMLen; j <= outputAlphaks; j++)
+        {
+            finalAlphaKs.at(i).push_back(dis(gen));
+        }
+    }
 }
 
 void Generator::generateOptimizedInputFile()
@@ -983,14 +1054,14 @@ void Generator::generateOptimizedInputFile()
                 values.at(p) = std::to_string(outputAlphaks);
             if (keys.at(p).find(":m:") != std::string::npos)
                 values.at(p) = std::to_string(ms.at(atom));
-            
+
             // write template to file
             fingerprintsFile << keys.at(p) << std::endl;
             fingerprintsFile << values.at(p) << std::endl;
         }
     }
     fingerprintsFile.close();
-    
+
     // delete the template pointers
 
     for (int i = 0; i < radialCombinationTemplateKeys.size(); i++)
