@@ -556,7 +556,7 @@ void Generator::parseParameters(char *path)
             selectionMethod = std::stoi(value);
         else if (key == "Output Radial Blocks:")
             outputRadialBlocks = std::stoi(value);
-        else if (key == "Output Alphaks:")
+        else if (key == "Output Bond Size:")
             outputAlphaks = std::stoi(value);
         else if (key == "Debug:")
             debug = (std::stoi(value) == 1);
@@ -763,7 +763,7 @@ void Generator::greedySelection()
         }
 
         ms.at(i) = bestM;
-
+        outputAlphaks = (int) ceil(outputAlphaks/bestM);
         for (int j = 0; j < outputAlphaks; j++)
         {
             if(j >= bestMLen) break;
@@ -823,6 +823,7 @@ void Generator::largestSpanningSelection()
         std::sort(selectedBond.at(i).at(bestM).begin(), selectedBond.at(i).at(bestM).end());
         finalAlphaKs.at(i).push_back(selectedBond.at(i).at(bestM).front());
         finalAlphaKs.at(i).push_back(selectedBond.at(i).at(bestM).back());
+        outputAlphaks = (int) ceil(outputAlphaks/bestM);
         for (int j = 0; j < outputAlphaks - 2; j++)
         {
             if(j >= bestMLen) break;

@@ -21,14 +21,14 @@ Alpha_k Upper Bound:
 Alpha_k Lower Bound:
 0
 Selections:
-20
+200
 Output Selections:
 1
 Selection Method:
-1
+2
 Output Radial Blocks:
 1
-Output Alphaks:
+Output Bond Size:
 10
 Debug:
 1
