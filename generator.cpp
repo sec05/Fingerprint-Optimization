@@ -812,7 +812,7 @@ void Generator::largestSpanningSelection()
         int bestMLen = 0;
         for (std::map<int, std::vector<double>>::iterator it = atomMap.begin(); it != atomMap.end(); ++it)
         {
-            if ((int)it->second.size() > bestMLen || (int)it->second.size() >= (int)ceil(outputAlphaks/bestM))
+            if ((int)it->second.size() > bestMLen || (int)it->second.size() >= (int)ceil(static_cast<float>(outputAlphaks)/static_cast<float>(bestM)))
             {
                 bestM = (int)it->first;
                 bestMLen = it->second.size();
