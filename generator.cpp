@@ -820,28 +820,27 @@ void Generator::largestSpanningSelection()
         }
 
         ms.at(i) = bestM;
-        std::sort(selectedBond.at(i).at(bestM).begin(), selectedBond.at(i).at(bestM).end());
-        finalAlphaKs.at(i).push_back(selectedBond.at(i).at(bestM).front());
-        finalAlphaKs.at(i).push_back(selectedBond.at(i).at(bestM).back());
-        outputAlphaks = (int) ceil(outputAlphaks/bestM);
-        for (int j = 0; j < outputAlphaks - 2; j++)
-        {
-            if(j >= bestMLen) break;
-            double maxGap = 0;
-            int maxGapIndex = -1;
-            for (int k = 0; k < selectedBond.at(i).at(bestM).size() - 1; ++k)
-            {
-                double gap = selectedBond.at(i).at(bestM).at(k + 1) - selectedBond.at(i).at(bestM).at(k);
-                if (gap > maxGap)
-                {
-                    maxGap = gap;
-                    maxGapIndex = i;
+        std::vector<double> alphaKs = atomMap.at(bestM);
+        std::sort(alphaKs.begin(),alphaKs.end());
+        finalAlphaKs.at(i).push_back(alphaKs[0]);
+
+        while(finalAlphaKs.at(i).size() < outputAlphaks || finalAlphaKs.at(i).size() < bestMLen){
+            double maxMinDistance = -1;
+            double bestCandidate = 0;
+            for(const auto& alphaK : alphaKs){
+                if(std::find(finalAlphaKs.at(i).begin(), finalAlphaKs.at(i).end(), alphaK) != finalAlphaKs.at(i).end()) continue;
+
+                double minDis = std::numeric_limits<double>::max();
+                for(const auto& selected : finalAlphaKs.at(i)){
+                    minDis= std::min(minDis, std::abs(selected - alphaK));
+                }
+
+                if(minDis > maxMinDistance){
+                    maxMinDistance = minDis;
+                    bestCandidate = alphaK;
                 }
             }
-                // Pick the middle element of the largest gap
-                double middleElement = (selectedBond.at(i).at(bestM)[maxGapIndex] + selectedBond.at(i).at(bestM)[maxGapIndex + 1]) / 2.0;
-                finalAlphaKs.at(i).push_back(middleElement);
-                selectedBond.at(i).at(bestM).erase(selectedBond.at(i).at(bestM).begin() + maxGapIndex + 1);
+            finalAlphaKs.at(i).push_back(bestCandidate);
         }
 
         // add the difference if we couldnt fill
