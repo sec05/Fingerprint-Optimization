@@ -22,13 +22,13 @@ std::vector<arma::dmat *> Generator::generate_fingerprint_matrix()
 {
     // create input file
     generate_opt_inputs();
-    std::cout << "generated input!" << std::endl;
+    if(verbose) std::cout << "Generator: created input!" << std::endl;
 
     // then pass it into the calibration software
     std::string temp = "./Optimizer Output/" + inputFile + ".opt";
     char *f = new char[temp.size() + 1];
     std::strcpy(f, temp.c_str());
-    calibrator = new PairRANN(f);
+    calibrator = new PairRANN(f,verbose);
     calibrator->setup();
     calibrator->normalize_data();
 
@@ -94,7 +94,7 @@ void Generator::generate_opt_inputs()
     }
 
     atomTypes = utils::splitString((*inputTable)[atomTypesIndex].second);
-    if (debug)
+    if (verbose)
         printf("Generator: found %zu atom types!\n", atomTypes.size());
 
     // create/clean atom types .optv files
@@ -558,8 +558,6 @@ void Generator::parseParameters(char *path)
             outputRadialBlocks = std::stoi(value);
         else if (key == "Output Bond Size:")
             outputAlphaks = std::stoi(value);
-        else if (key == "Debug:")
-            debug = (std::stoi(value) == 1);
         else
             printf("Error: could not parse key: %s with value: %s\n", key.c_str(), value.c_str());
     }
@@ -627,7 +625,7 @@ std::map<int, std::pair<std::string, std::string>> *Generator::readFile()
 
 void Generator::readSelectedVariables(std::vector<arma::uvec> &selections)
 {
-    printf("Outputing variables\n");
+    if(verbose) printf("Outputing variables\n");
 
     std::ofstream out;
     if (outputSelections)

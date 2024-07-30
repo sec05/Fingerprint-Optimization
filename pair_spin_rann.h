@@ -34,9 +34,11 @@ namespace RANN {
 
 class PairRANN{
 public:
-	PairRANN(char *);
+	PairRANN(char *, bool);
 	~PairRANN();
 	void setup();
+
+	bool verbose;
 
 	//global parameters read from file
 	char *algorithm;

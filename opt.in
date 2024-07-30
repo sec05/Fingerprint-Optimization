@@ -5,7 +5,7 @@ Output File:
 # comment here
 Bi.DCUR.out
 Verbose:
-1
+0
 Output Selections:
 1
 Radial Blocks:
@@ -30,5 +30,3 @@ Output Radial Blocks:
 1
 Output Bond Size:
 10
-Debug:
-1

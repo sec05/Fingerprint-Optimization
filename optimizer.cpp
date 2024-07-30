@@ -23,31 +23,10 @@ Optimizer::~Optimizer()
 void Optimizer::getKBestColumns()
 {   
     int k = generator->selections;
-    int mode = 4;
-    printf("Getting %d best columns\n", k);
+    if(generator->verbose) printf("Getting %d best columns\n", k);
     for (int i = 0; i < fingerprints.size(); i++)
     {
-        switch (mode)
-        {
-        case 0:
-            selections.push_back(DEIM(fingerprints.at(i),k));
-            break;
-        case 1:
-
-            selections.push_back(QDEIM(fingerprints.at(i),k,0.9));
-            break;
-        case 2:
-            selections.push_back(selectByImportanceScore(fingerprints.at(i),k,generator->ms.at(i),generator->totalRadial.at(i)));
-            break;
-        case 3:
-            selections.push_back(farthestPointSampling(fingerprints.at(i),k));
-            break;
-        case 4:
-            selections.push_back(deterministicCUR(fingerprints.at(i),k,generator->ms.at(i),generator->totalRadial.at(i)));
-            break;
-        default:
-            break;
-        }
+        selections.push_back(deterministicCUR(fingerprints.at(i),k,generator->ms.at(i),generator->totalRadial.at(i)));
     }
 }
 

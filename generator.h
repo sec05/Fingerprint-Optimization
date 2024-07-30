@@ -31,7 +31,6 @@ namespace OPT
         int selections;
         bool outputSelections;
         int selectionMethod;
-        bool debug;
         int outputRadialBlocks;
         int outputAlphaks;
         // for each atom type map of n, alphas and m, alpha_ks

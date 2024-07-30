@@ -6,8 +6,10 @@
 
 using namespace LAMMPS_NS;
 
-PairRANN::PairRANN(char *potential_file)
+PairRANN::PairRANN(char *potential_file, bool v)
 {
+	verbose = v;
+
 	cutmax = 0.0;
 	nelementsp = -1;
 	nelements = -1;
@@ -215,8 +217,8 @@ void PairRANN::setup()
 #pragma omp parallel
 	nthreads = omp_get_num_threads();
 
-	std::cout << std::endl;
-	std::cout << "# Number Threads     : " << nthreads << std::endl;
+	if(verbose) std::cout << std::endl;
+	if(verbose) std::cout << "# Number Threads     : " << nthreads << std::endl;
 
 	double start_time = omp_get_wtime();
 	read_file(potential_input_file);
@@ -235,7 +237,7 @@ void PairRANN::setup()
 
 	double end_time = omp_get_wtime();
 	double time = (end_time - start_time);
-	printf("finished setup(): %f seconds\n", time);
+	if(verbose) printf("finished setup(): %f seconds\n", time);
 }
 
 void PairRANN::read_parameters(std::vector<std::string> line, std::vector<std::string> line1, FILE *fp, char *filename, int *linenum, char *linetemp)
@@ -753,7 +755,7 @@ void PairRANN::read_dump_files()
 	{
 		errorf("unable to open dump directory");
 	}
-	std::cout << "reading dump files\n";
+	if(verbose) std::cout << "reading dump files\n";
 	int nsims = 0;
 	int nsets = 0;
 	// count files
@@ -822,7 +824,7 @@ void PairRANN::read_dump_files()
 			continue;
 		}
 		FILE *fid = fopen(entry->d_name, "r");
-		printf("\t%s\n", entry->d_name);
+		if(verbose) printf("\t%s\n", entry->d_name);
 		if (!fid)
 		{
 			continue;
@@ -1151,7 +1153,7 @@ void PairRANN::read_dump_files()
 		fclose(fid);
 	}
 	closedir(folder);
-	sprintf(line, "imported %d atoms, %d simulations\n", natoms, nsims);
+	if(verbose) sprintf(line, "imported %d atoms, %d simulations\n", natoms, nsims);
 	std::cout << line;
 }
 
@@ -1203,7 +1205,7 @@ void PairRANN::create_neighbor_lists()
 	int i, ix, iy, iz, j, k;
 	//	char str[MAXLINE];
 	double buffer = 0.01; // over-generous compensation for roundoff error
-	std::cout << "building neighbor lists\n";
+	if(verbose) std::cout << "building neighbor lists\n";
 	for (i = 0; i < nsims; i++)
 	{
 		double box[3][3];
@@ -1462,7 +1464,7 @@ void PairRANN::create_neighbor_lists()
 // TO DO: fix stack size problem
 void PairRANN::compute_fingerprints()
 {
-	std::cout << "computing fingerprints\n";
+	if(verbose) std::cout << "computing fingerprints\n";
 	int nn, j, ii, f, i, itype, jnum;
 	for (nn = 0; nn < nsims; nn++)
 	{
@@ -1745,7 +1747,7 @@ void PairRANN::separate_validation()
 	int Ir[nsims];
 	bool w;
 	n1 = n2 = 0;
-	sprintf(str, "finishing setup\n");
+	if(verbose) sprintf(str, "finishing setup\n");
 	std::cout << str;
 	for (i = 0; i < nsims; i++)
 		Iv[i] = -1;
@@ -1818,7 +1820,7 @@ void PairRANN::separate_validation()
 		r[i] = Ir[i];
 		natomsr += sims[r[i]].inum;
 	}
-	sprintf(str, "assigning %d simulations (%d atoms) for validation, %d simulations (%d atoms) for fitting\n", nsimv, natomsv, nsimr, natomsr);
+	if(verbose) sprintf(str, "assigning %d simulations (%d atoms) for validation, %d simulations (%d atoms) for fitting\n", nsimv, natomsv, nsimr, natomsr);
 	std::cout << str;
 }
 

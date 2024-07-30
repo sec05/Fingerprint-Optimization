@@ -1,6 +1,3 @@
-/*
-This class is the driver class for the optimization program
-*/
 #include <armadillo>
 #include "generator.h"
 namespace OPT
