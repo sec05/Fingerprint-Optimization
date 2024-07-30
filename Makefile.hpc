@@ -55,10 +55,3 @@ clean:
 
 # Default target
 all: $(TARGET)
-
-# recepie for installing
-setup:
-	tar -xf armadillo-14.0.1.tar.xz
-	cmake armadillo-14.0.1 -DCMAKE_INSTALL_PREFIX:PATH=$(ARMA_PATH)
-	make install
-	make -j 40 -f Makefile.hpc
