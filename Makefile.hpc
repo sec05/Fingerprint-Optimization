@@ -59,10 +59,6 @@ all: $(TARGET)
 # recepie for installing
 setup:
 	tar -xf armadillo-14.0.1.tar.xz
-#	#	cd armadillo-14.0.1
-#	module load intel-oneapi-mpi
-#	module load intel-oneapi-mkl
-#	module load openblas
 	cmake armadillo-14.0.1 -DCMAKE_INSTALL_PREFIX:PATH=$(ARMA_PATH)
 	make install
 	make -j 40 -f Makefile.hpc
