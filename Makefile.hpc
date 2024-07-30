@@ -14,9 +14,9 @@ TARGET := fingerprint_optimizer
 
 # Define the compiler and compiler flags
 CXX := g++
-CXXFLAGS := -g -std=c++17 -O2 -shared-libgcc -MMD -fopenmp -I $(HOME)/work/usr/include
-LDFLAGS := -fopenmp -L $(HOME)/work/usr/lib64 -Wl,-rpath=$(HOME)/work/usr/lib64
-LDLIBS := -larmadillo
+CXXFLAGS := -g -std=c++17 -O2 -shared-libgcc -MMD -fopenmp -I $(ARMA_PATH)/include
+LDFLAGS := -fopenmp -L $(ARMA_PATH)/lib64 -Wl,-rpath=$(ARMA_PATH)/lib64:$(MKLROOT)/lib/intel64
+LDLIBS := -larmadillo 
 
 # Define the object files (with paths relative to OBJ_DIR)
 OBJ_FILES := $(patsubst $(BASE_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(wildcard $(BASE_DIR)/*.cpp)) \
@@ -50,13 +50,19 @@ $(OBJ_DIR)/%.o: $(STATE_DIR)/%.cpp
 clean:
 	rm -rf $(OBJ_DIR) $(TARGET)
 
-tridiag:
-	make
-	./fingerprint_optimizer
-	python Matrix\ Output/validator.py
-
 # Phony targets
 .PHONY: all clean
 
 # Default target
 all: $(TARGET)
+
+# recepie for installing
+setup:
+	tar -xf armadillo-14.0.1.tar.xz
+#	#	cd armadillo-14.0.1
+#	module load intel-oneapi-mpi
+#	module load intel-oneapi-mkl
+#	module load openblas
+	cmake armadillo-14.0.1 -DCMAKE_INSTALL_PREFIX:PATH=$(ARMA_PATH)
+	make install
+	make -j 40 -f Makefile.hpc
