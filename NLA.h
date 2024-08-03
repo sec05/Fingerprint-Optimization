@@ -1,7 +1,7 @@
 #include <armadillo>
 #include <random>
 #include <math.h>
-#include "omp.h"
+//#include "omp.h"
 
 arma::dmat BSSSampling(arma::dmat &V, arma::dmat &R, int r, arma::uvec &selections, double ms, int offset)
 {
@@ -106,17 +106,17 @@ arma::dmat adaptiveCols(arma::dmat &A, arma::dmat &V, double alpha, int c, arma:
     return C;
 }
 
-arma::uvec deterministicCUR(arma::dmat *A, int k, int ms, int offset)
+arma::uvec deterministicCUR(arma::dmat A, int k, int ms, int offset)
 {
     int n = 0;
     try
     {
-        n = arma::rank(*A);
+        n = arma::rank(A);
     }
     catch (const std::exception &e)
     {
         std::cerr << e.what() << '\n';
-        printf("A is %d x %d\n", A->n_rows, A->n_cols);
+        printf("A is %d x %d\n", A.n_rows, A.n_cols);
     }
 
     if (k > n) 
@@ -126,16 +126,16 @@ arma::uvec deterministicCUR(arma::dmat *A, int k, int ms, int offset)
 
     arma::dmat U, V, E;
     arma::dvec s;
-    arma::svd_econ(U, s, V, *A);
+    arma::svd_econ(U, s, V, A);
     V = V.cols(0, k - 1);
-    E = (*A) - (*A) * V * V.t();
+    E = (A) - (A) * V * V.t();
     E = E.t();
     int a = k / 2, b = k / 2;
     if (k % 2 != 0)
         a++;
     arma::dmat S = BSSSampling(V, E, a, selections, ms, offset);
-    arma::dmat C1 = (*A) * S;
-    arma::dmat C2 = adaptiveCols(*A, C1, 1, b, selections, a, ms, offset);
+    arma::dmat C1 = (A) * S;
+    arma::dmat C2 = adaptiveCols(A, C1, 1, b, selections, a, ms, offset);
     selections.save("selections.txt", arma::raw_ascii);
     return selections;
 }

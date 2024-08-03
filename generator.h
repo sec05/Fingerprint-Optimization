@@ -39,10 +39,13 @@ namespace OPT
         std::vector<std::string> atomTypes;
         std::vector<int> ms, alphas, totalRadial, totalBond;
         std::vector<std::pair<int,int>> osAndns;
+            std::vector<std::string> radialCombinations;
+                std::vector<std::string> bondCombinations;
+                std::string inputFile;
+        std::string outputFile;
     private:
         LAMMPS_NS::PairRANN *calibrator;
-        std::string inputFile;
-        std::string outputFile;
+        
         void generate_opt_inputs();
         std::map<int, std::pair<std::string, std::string>> *readFile();
         void greedySelection();

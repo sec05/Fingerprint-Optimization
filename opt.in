@@ -1,21 +1,21 @@
 # Any lines with "#" will be ignored!
 Input File:
-Bi.nn
+NiTi.nn
 Output File:
 # comment here
-Bi.DCUR.out
+NiTi.out
 Verbose:
-0
+1
 Output Selections:
 1
 Radial Blocks:
-100
+50
 Alpha Upper Bound:
 10
 Alpha Lower Bound:
 0
 ks:
-125
+60
 Alpha_k Upper Bound:
 10
 Alpha_k Lower Bound:
@@ -29,4 +29,4 @@ Selection Method:
 Output Radial Blocks:
 1
 Output Bond Size:
-10
+4

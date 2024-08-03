@@ -115,7 +115,6 @@ void Generator::generate_opt_inputs()
 
     // need to generate all combinations of atoms for radial
     // example atoms = [Ti,Ni] we make Ti_Ti, Ti_Ni, Ni_Ni, Ni_Ti
-    std::vector<std::string> radialCombinations;
     for (int i = 0; i < atomTypes.size(); i++)
     {
         for (int j = 0; j < atomTypes.size(); j++)
@@ -125,7 +124,7 @@ void Generator::generate_opt_inputs()
     }
 
     // do the same thing for bond fingerprints
-    std::vector<std::string> bondCombinations;
+
     for (int i = 0; i < atomTypes.size(); i++)
     {
         for (int j = 0; j < atomTypes.size(); j++)
@@ -566,7 +565,7 @@ void Generator::parseParameters(char *path)
 std::map<int, std::pair<std::string, std::string>> *Generator::readFile()
 {
     if (verbose)
-        printf("Generator: reading %s!\n", inputFile.c_str());
+        printf("Generator: opening file %s for reading!\n", inputFile.c_str());
     std::map<int, std::pair<std::string, std::string>> *pairs = new std::map<int, std::pair<std::string, std::string>>();
 
     // open file for reading
@@ -625,7 +624,7 @@ std::map<int, std::pair<std::string, std::string>> *Generator::readFile()
 
 void Generator::readSelectedVariables(std::vector<arma::uvec> &selections)
 {
-    if(verbose) printf("Outputing variables\n");
+    if(verbose) printf("Outputing variables to %s.sel\n",outputFile.c_str());
 
     std::ofstream out;
     if (outputSelections)
@@ -634,10 +633,10 @@ void Generator::readSelectedVariables(std::vector<arma::uvec> &selections)
         if (!out)
             printf("Error: could not open output file: %s\n", outputFile.c_str());
     }
-
-    for (int i = 0; i < atomTypes.size(); i++)
+    
+    for (int i = 0; i < radialCombinations.size(); i++)
     {
-        std::string atom = atomTypes.at(i);
+        std::string atom = radialCombinations.at(i).substr(0,radialCombinations.at(i).find("_"));
         arma::uvec cols = selections.at(i);
 
         // open variable vector file
@@ -653,6 +652,7 @@ void Generator::readSelectedVariables(std::vector<arma::uvec> &selections)
         {
             std::string line;
             int entry = 0;
+
             while (std::getline(f, line))
             {
                 if (cols.at(i) == entry)
@@ -667,13 +667,13 @@ void Generator::readSelectedVariables(std::vector<arma::uvec> &selections)
             }
             f.seekg(0);
         }
-
+        // need to do it for each of the sub divisions too
         // we create a map of each n: alphas and each m: alphaks
         std::map<int, std::vector<double>> radialMap, bondMap;
 
         // if requesting selections then we output
         if (outputSelections)
-            out << atom << std::endl;
+            out << radialCombinations.at(i)<<" , " << bondCombinations.at(i)<< std::endl;
 
         // add to the maps and split values from the selected variables
         for (std::string variable : variables)
@@ -727,12 +727,12 @@ void Generator::greedySelection()
     std::uniform_real_distribution<> dis(radialFingerprintsLowerBound, radialFingerprintsUpperBound);
 
     // select globally best values
-    for (int i = 0; i < atomTypes.size(); i++)
+    for (int i = 0; i < radialCombinations.size(); i++)
     {
         std::map<int, std::vector<double>> atomMap = selectedRadial.at(i);
         std::pair<int, int> range = osAndns.at(i);
         finalAlphas.push_back(std::vector<double>());
-        finalAlphaKs.push_back(std::vector<double>());
+        finalAlphaKs.push_back(std::vector<double>());  
         for (int k = 0; k < outputRadialBlocks; k++)
         {
             for (int j = range.first; j <= range.second; j++)
@@ -784,7 +784,7 @@ void Generator::largestSpanningSelection()
     std::uniform_real_distribution<> dis(radialFingerprintsLowerBound, radialFingerprintsUpperBound);
 
     // select globally best values
-    for (int i = 0; i < atomTypes.size(); i++)
+    for (int i = 0; i < radialCombinations.size(); i++)
     {
         std::map<int, std::vector<double>> atomMap = selectedRadial.at(i);
         std::pair<int, int> range = osAndns.at(i);
@@ -810,6 +810,7 @@ void Generator::largestSpanningSelection()
         int bestMLen = 0;
         for (std::map<int, std::vector<double>>::iterator it = atomMap.begin(); it != atomMap.end(); ++it)
         {
+        
             if ((int)it->second.size() > bestMLen || (int)it->second.size() >= (int)ceil(static_cast<float>(outputAlphaks)/static_cast<float>(bestM)))
             {
                 bestM = (int)it->first;
@@ -853,30 +854,6 @@ void Generator::largestSpanningSelection()
 void Generator::generateOptimizedInputFile()
 {
     std::map<int, std::pair<std::string, std::string>> *inputTable = readFile();
-
-    // need to generate all combinations of atoms for radial
-    // example atoms = [Ti,Ni] we make Ti_Ti, Ti_Ni, Ni_Ni, Ni_Ti
-    std::vector<std::string> radialCombinations;
-    for (int i = 0; i < atomTypes.size(); i++)
-    {
-        for (int j = 0; j < atomTypes.size(); j++)
-        {
-            radialCombinations.push_back(atomTypes[i] + "_" + atomTypes[j]);
-        }
-    }
-
-    // do the same thing for bond fingerprints
-    std::vector<std::string> bondCombinations;
-    for (int i = 0; i < atomTypes.size(); i++)
-    {
-        for (int j = 0; j < atomTypes.size(); j++)
-        {
-            if (atomTypes[i] == atomTypes[j])
-                bondCombinations.push_back(atomTypes[i] + "_" + atomTypes[j] + "_" + atomTypes[i]);
-            else
-                bondCombinations.push_back(atomTypes[i] + "_" + atomTypes[j] + "_all");
-        }
-    }
 
     // we need a template for each radial combination so we create a list of templates
     // remember to free!!!
@@ -997,10 +974,8 @@ void Generator::generateOptimizedInputFile()
     }
 
     // we now write back the blocks, we know there are atomTypes^2 of each type to write
-    for (int k = 0; k < atomTypes.size() * atomTypes.size(); k++)
+    for (int k = 0; k < radialCombinations.size(); k++)
     {
-        // get atom ie if Ni_Ti => Ni
-        int atom = k / atomTypes.size();
 
         // write back number of radial blocks requested
         for (int i = 0; i < outputRadialBlocks; i++)
@@ -1016,10 +991,10 @@ void Generator::generateOptimizedInputFile()
                 if (keys.at(p).find("alpha") != std::string::npos)
                 {
                     values.at(p) = "";
-                    for (int q = i * (finalAlphas.at(atom).size() / outputRadialBlocks); q < (i + 1) * (finalAlphas.at(atom).size() / outputRadialBlocks); q++)
+                    for (int q = i * (finalAlphas.at(k).size() / outputRadialBlocks); q < (i + 1) * (finalAlphas.at(k).size() / outputRadialBlocks); q++)
                     {
-                        values.at(p) += std::to_string(finalAlphas.at(atom).at(q));
-                        values.at(p) += q == finalAlphas.at(atom).size() - 1 ? "" : " ";
+                        values.at(p) += std::to_string(finalAlphas.at(k).at(q));
+                        values.at(p) += q == finalAlphas.at(k).size() - 1 ? "" : " ";
                     }
                 }
 
@@ -1042,8 +1017,8 @@ void Generator::generateOptimizedInputFile()
                 values.at(p) = "";
                 for (int q = 0; q < outputAlphaks; q++)
                 {
-                    values.at(p) += std::to_string(finalAlphaKs.at(atom).at(q));
-                    values.at(p) += q == finalAlphaKs.at(atom).size() - 1 ? "" : " ";
+                    values.at(p) += std::to_string(finalAlphaKs.at(k).at(q));
+                    values.at(p) += q == finalAlphaKs.at(k).size() - 1 ? "" : " ";
                 }
             }
 
@@ -1051,7 +1026,7 @@ void Generator::generateOptimizedInputFile()
             if (keys.at(p).find(":k:") != std::string::npos)
                 values.at(p) = std::to_string(outputAlphaks);
             if (keys.at(p).find(":m:") != std::string::npos)
-                values.at(p) = std::to_string(ms.at(atom));
+                values.at(p) = std::to_string(ms.at(k));
 
             // write template to file
             fingerprintsFile << keys.at(p) << std::endl;
@@ -1075,4 +1050,6 @@ void Generator::generateOptimizedInputFile()
     }
 
     delete inputTable;
+
+    if(verbose) printf("Finished creating optimized input file at %s\n",outputFile.c_str());
 }
