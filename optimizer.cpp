@@ -34,7 +34,6 @@ void Optimizer::getKBestColumns()
             int radialColSize = generator->totalRadial.at(i) / generator->atomTypes.size();
             int bondColSize = generator->totalBond.at(i) / generator->atomTypes.size();
             if(generator->verbose) printf("Fingerprint matrix for %s has %d cols\n",generator->atomTypes.at(j).c_str(),fingerprints.at(i)->n_cols);
-            if(generator->verbose) printf("Num of radial fingerprints part of combo %s is %d, and for bond combo %s is %d\n",generator->radialCombinations.at(i).c_str(),radialColSize,generator->bondCombinations.at(i).c_str(),bondColSize);
             if(generator->verbose) printf("Grabbing column subset %d -> %d, and %d -> %d\n", j * radialColSize, (j + 1) * radialColSize-1 , (j + 1) * radialColSize + j*bondColSize ,( (j + 1) * radialColSize + (j + 1) * bondColSize)-1);
             
             arma::dmat A = arma::join_rows(fingerprints.at(i)->cols(j * radialColSize, (j + 1) * radialColSize-1 ), fingerprints.at(i)->cols((j + 1) * radialColSize + j*bondColSize , ((j + 1) * radialColSize + (j + 1) * bondColSize)-1));
