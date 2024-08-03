@@ -924,7 +924,7 @@ void Generator::generateOptimizedInputFile()
             combinationType = combinationType.substr(0, combinationType.find_first_of('_'));
             if (combinationType == atom)
             {
-                size += alphas.at(j);
+                size += alphas.at(i);
             }
         }
 
@@ -934,7 +934,7 @@ void Generator::generateOptimizedInputFile()
             combinationType = combinationType.substr(0, combinationType.find_first_of('_'));
             if (combinationType == atom)
             {
-                size += ms.at(j) * outputAlphaks;
+                size += ms.at(i) * outputAlphaks;
             }
         }
         j++;
