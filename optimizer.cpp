@@ -34,9 +34,9 @@ void Optimizer::getKBestColumns()
             int radialColSize = generator->totalRadial.at(i) / generator->atomTypes.size();
             int bondColSize = generator->totalBond.at(i) / generator->atomTypes.size();
             if(generator->verbose) printf("Fingerprint matrix for %s has %d cols\n",generator->atomTypes.at(j).c_str(),fingerprints.at(i)->n_cols);
-            if(generator->verbose) printf("Grabbing column subset %d -> %d, and %d -> %d\n", j * radialColSize, (j + 1) * radialColSize-1 , (j + 1) * radialColSize + j*bondColSize ,( (j + 1) * radialColSize + (j + 1) * bondColSize)-1);
+            if(generator->verbose) printf("Grabbing column subset %d -> %d, and %d -> %d\n", j * radialColSize, (j + 1) * radialColSize-1 , generator->atomTypes.size() * radialColSize + j*bondColSize ,( generator->atomTypes.size() * radialColSize + (j + 1) * bondColSize)-1);
             
-            arma::dmat A = arma::join_rows(fingerprints.at(i)->cols(j * radialColSize, (j + 1) * radialColSize-1 ), fingerprints.at(i)->cols((j + 1) * radialColSize + j*bondColSize , ((j + 1) * radialColSize + (j + 1) * bondColSize)-1));
+            arma::dmat A = arma::join_rows(fingerprints.at(i)->cols(j * radialColSize, (j + 1) * radialColSize-1 ), fingerprints.at(i)->cols(generator->atomTypes.size() * radialColSize + j*bondColSize, (generator->atomTypes.size() * radialColSize + (j + 1) * bondColSize)-1));
             selections.push_back(deterministicCUR(A, k, generator->ms.at(counter), radialColSize));
             
             // now we update the idices to match original entries
